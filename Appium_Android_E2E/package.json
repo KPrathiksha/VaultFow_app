@@ -1,0 +1,18 @@
+{
+  "name": "appium-android-e2e",
+  "version": "1.0.0",
+  "description": "Appium End-to-End Test Suite for VaultFlow Android Application",
+  "main": "run-appium-suite.js",
+  "scripts": {
+    "test": "node run-appium-suite.js",
+    "test:live": "cross-env LIVE_EXECUTION=true node run-appium-suite.js",
+    "test:report": "node run-appium-suite.js --report-only"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "webdriverio": "^8.39.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
+  }
+}

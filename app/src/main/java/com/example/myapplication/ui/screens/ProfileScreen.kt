@@ -23,6 +23,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vaultflow.data.model.UserProfile
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import com.example.vaultflow.ui.components.VaultBottomNavigation
 import com.example.vaultflow.ui.theme.*
 import com.example.vaultflow.ui.viewmodel.VaultViewModel
@@ -42,6 +48,12 @@ fun ProfileScreen(
     val savingsGoals by viewModel.savingsGoals.collectAsState()
     
     var showEditDialog by remember { mutableStateOf(false) }
+    var showApiDialog by remember { mutableStateOf(false) }
+    var showSecurityDialog by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("vaultflow_prefs", android.content.Context.MODE_PRIVATE) }
+    var isAppLocked by remember { mutableStateOf(prefs.getBoolean("is_app_locked", false)) }
     
     val profile = userProfile ?: UserProfile(
         uid = user?.uid ?: "",
@@ -56,6 +68,32 @@ fun ProfileScreen(
             onConfirm = { updated ->
                 viewModel.saveProfile(updated)
                 showEditDialog = false
+            }
+        )
+    }
+
+    if (showApiDialog) {
+        ConfigureApiDialog(
+            onDismiss = { showApiDialog = false },
+            onConfirm = { customKey, customBaseUrl ->
+                prefs.edit()
+                    .putString("gemini_api_key", customKey)
+                    .putString("gemini_base_url", customBaseUrl)
+                    .apply()
+                viewModel.updateAiApiKey(customKey, customBaseUrl)
+                showApiDialog = false
+            }
+        )
+    }
+
+    if (showSecurityDialog) {
+        SecuritySettingsDialog(
+            currentLockState = isAppLocked,
+            onDismiss = { showSecurityDialog = false },
+            onConfirm = { newState ->
+                prefs.edit().putBoolean("is_app_locked", newState).apply()
+                isAppLocked = newState
+                showSecurityDialog = false
             }
         )
     }
@@ -90,12 +128,12 @@ fun ProfileScreen(
                 ProfileMenuItemModern(Icons.Default.PieChart, "Budget Planner", "Manage limits", onClick = { onNavigate("insights") })
                 ProfileMenuItemModern(Icons.Default.Subscriptions, "Subscriptions", "Manage recurring payments", onClick = { onNavigate("subscriptions") })
                 ProfileMenuItemModern(Icons.Default.Savings, "Savings Goals", "View active targets", onClick = { onNavigate("savings") })
-                ProfileMenuItemModern(Icons.Default.AutoAwesome, "AI Coach Settings", "Configure your financial assistant")
+                ProfileMenuItemModern(Icons.Default.AutoAwesome, "AI Coach Settings", "Configure your financial assistant", onClick = { showApiDialog = true })
             }
             
             item {
                 ProfileSectionHeader("App Preferences")
-                ProfileMenuItemModern(Icons.Default.Security, "Privacy & Security", "Fingerprint & PIN")
+                ProfileMenuItemModern(Icons.Default.Security, "Privacy & Security", if (isAppLocked) "App Lock: Enabled" else "App Lock: Disabled", onClick = { showSecurityDialog = true })
                 ProfileMenuItemModern(Icons.Default.Notifications, "Notifications", "Alerts & Nudges")
                 ProfileMenuItemModern(Icons.AutoMirrored.Filled.Help, "Help & Support", "FAQs & Contact Us")
                 ProfileMenuItemModern(Icons.Default.Info, "About VaultFlow", "Version 2.1.0")
@@ -192,7 +230,7 @@ fun FinancialQuickSummary(balance: Double, goalsCount: Int) {
         Card(
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = VaultSurface),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -203,7 +241,7 @@ fun FinancialQuickSummary(balance: Double, goalsCount: Int) {
         Card(
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = VaultSurface),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -305,6 +343,215 @@ fun EditProfileDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary)
             ) {
                 Text("Save Changes")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+@Composable
+fun ConfigureApiDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String, String) -> Unit
+) {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("vaultflow_prefs", android.content.Context.MODE_PRIVATE) }
+    
+    var apiKeyInput by remember { mutableStateOf(prefs.getString("gemini_api_key", "") ?: "") }
+    var baseUrlInput by remember { mutableStateOf(prefs.getString("gemini_base_url", "") ?: "") }
+    var keyVisible by remember { mutableStateOf(false) }
+    var isValidating by remember { mutableStateOf(false) }
+    var feedbackState by remember { mutableStateOf<String?>(null) }
+    var isSuccess by remember { mutableStateOf(false) }
+    
+    val coroutineScope = rememberCoroutineScope()
+    val viewModel: VaultViewModel = viewModel()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Configure AI API Key", fontWeight = FontWeight.Bold, color = VaultTextDark) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Configure your own personal Google Gemini API Key and custom Endpoint Base URL to power the AI Coach natively.",
+                    fontSize = 12.sp,
+                    color = VaultTextLight
+                )
+
+                OutlinedTextField(
+                    value = apiKeyInput,
+                    onValueChange = { apiKeyInput = it },
+                    label = { Text("Gemini API Key") },
+                    placeholder = { Text("AIzaSy...") },
+                    singleLine = true,
+                    enabled = !isValidating && !isSuccess,
+                    visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        val image = if (keyVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                        IconButton(onClick = { keyVisible = !keyVisible }, enabled = !isValidating && !isSuccess) {
+                            Icon(imageVector = image, contentDescription = "Toggle key visibility")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = baseUrlInput,
+                    onValueChange = { baseUrlInput = it },
+                    label = { Text("Custom Base URL (Optional)") },
+                    placeholder = { Text("https://generativelanguage.googleapis.com") },
+                    singleLine = true,
+                    enabled = !isValidating && !isSuccess,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (isValidating) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = VaultPrimary)
+                        Text("Verifying API with Custom Server...", fontSize = 12.sp, color = VaultTextLight)
+                    }
+                }
+
+                feedbackState?.let {
+                    Text(
+                        text = it,
+                        color = if (isSuccess) VaultIncome else MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (apiKeyInput.isBlank()) {
+                        feedbackState = "Please enter an API Key"
+                        return@Button
+                    }
+                    
+                    if (isSuccess) {
+                        onDismiss()
+                        return@Button
+                    }
+
+                    coroutineScope.launch {
+                        isValidating = true
+                        feedbackState = null
+                        
+                        // Execute on-device validation with custom base URL
+                        val isValid = viewModel.validateGeminiKey(apiKeyInput, baseUrlInput)
+                        isValidating = false
+                        
+                        if (isValid) {
+                            isSuccess = true
+                            feedbackState = "Added successfully!"
+                            onConfirm(apiKeyInput, baseUrlInput)
+                        } else {
+                            isSuccess = false
+                            feedbackState = "Invalid API setup. Please verify credentials!"
+                        }
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isSuccess) VaultIncome else VaultPrimary
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(if (isSuccess) "Close" else "Verify & Add")
+            }
+        },
+        dismissButton = {
+            if (!isSuccess) {
+                TextButton(onClick = onDismiss, enabled = !isValidating) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+@Composable
+fun SecuritySettingsDialog(
+    currentLockState: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (Boolean) -> Unit
+) {
+    var isToggled by remember { mutableStateOf(currentLockState) }
+    var pinInput by remember { mutableStateOf("") }
+    var errorState by remember { mutableStateOf<String?>(null) }
+    
+    val viewModel: VaultViewModel = viewModel()
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Privacy & Security", fontWeight = FontWeight.Bold, color = VaultTextDark) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Enabling App Lock will require entering your secure 4-digit MPIN on startup to unlock the application.",
+                    fontSize = 12.sp,
+                    color = VaultTextLight
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Enable MPIN App Lock", fontWeight = FontWeight.SemiBold, color = VaultTextDark)
+                    Switch(
+                        checked = isToggled,
+                        onCheckedChange = { isToggled = it }
+                    )
+                }
+
+                if (isToggled != currentLockState) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Please enter your 4-digit Security PIN to authorize change:", fontSize = 12.sp, color = VaultTextLight)
+                    OutlinedTextField(
+                        value = pinInput,
+                        onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) pinInput = it },
+                        label = { Text("Security PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    errorState?.let {
+                        Text(text = it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (isToggled == currentLockState) {
+                        onDismiss()
+                        return@Button
+                    }
+                    
+                    val activeAccount = bankAccounts.firstOrNull()
+                    val correctPin = activeAccount?.pin ?: "1234"
+
+                    if (pinInput == correctPin) {
+                        onConfirm(isToggled)
+                    } else {
+                        errorState = "Incorrect security PIN. Please try again!"
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary)
+            ) {
+                Text("Confirm Change")
             }
         },
         dismissButton = {

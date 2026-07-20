@@ -12,6 +12,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -31,11 +32,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.vaultflow.data.model.Transaction
 import com.example.vaultflow.data.model.TransactionType
 import com.example.vaultflow.ui.components.TransactionItem
+import com.example.vaultflow.ui.components.TransactionReceiptDialog
 import com.example.vaultflow.ui.components.VaultBottomNavigation
 import com.example.vaultflow.ui.theme.*
 import com.example.vaultflow.ui.viewmodel.VaultViewModel
@@ -56,6 +62,8 @@ fun DashboardScreen(
     val aiNudge by viewModel.aiNudge.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
     val savingsGoals by viewModel.savingsGoals.collectAsState()
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
+    val isProfileLoaded by viewModel.isProfileLoaded.collectAsState()
     
     val displayName = userProfile?.displayName ?: userName
 
@@ -64,6 +72,19 @@ fun DashboardScreen(
     var showSendDialog by remember { mutableStateOf(false) }
     var showReceiveDialog by remember { mutableStateOf(false) }
     var showScanDialog by remember { mutableStateOf(false) }
+    var showPinDialog by remember { mutableStateOf(false) }
+
+    var currentTransferRecipient by remember { mutableStateOf("") }
+    var currentTransferAmount by remember { mutableStateOf(0.0) }
+
+    var selectedTransactionForReceipt by remember { mutableStateOf<Transaction?>(null) }
+
+    var showSetupWizard by remember { mutableStateOf(false) }
+    LaunchedEffect(userProfile, isProfileLoaded) {
+        if (isProfileLoaded && (userProfile == null || userProfile?.displayName?.isBlank() == true)) {
+            showSetupWizard = true
+        }
+    }
 
     val context = LocalContext.current
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
@@ -91,6 +112,34 @@ fun DashboardScreen(
         )
     }
 
+    if (showSetupWizard) {
+        OnboardingSetupWizardOverlay(
+            onDismiss = { showSetupWizard = false },
+            onConfirm = { name, pin ->
+                val updatedProfile = com.example.vaultflow.data.model.UserProfile(
+                    uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "",
+                    displayName = name,
+                    email = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.email ?: ""
+                )
+                viewModel.saveProfile(updatedProfile)
+                
+                // Create a default Bank Account with their set PIN instantly so they have a pin-authorized bank!
+                viewModel.addBankAccount(
+                    com.example.vaultflow.data.model.BankAccount(
+                        bankName = "HDFC Bank",
+                        accountHolder = name,
+                        accountNumber = "**** 2839",
+                        balance = 25000.0,
+                        pin = pin
+                    )
+                )
+            },
+            onNavigateToWallet = {
+                onNavigate("wallet")
+            }
+        )
+    }
+
     if (showAddBudgetDialog) {
         AddBudgetDialog(
             onDismiss = { showAddBudgetDialog = false },
@@ -110,15 +159,79 @@ fun DashboardScreen(
         SendDialog(
             onDismiss = { showSendDialog = false },
             onConfirm = { recipient, amount ->
-                viewModel.addTransaction(
-                    Transaction(
-                        title = "Sent to $recipient",
-                        amount = amount,
-                        category = "Transfer",
-                        type = TransactionType.EXPENSE
-                    )
-                )
+                currentTransferRecipient = recipient
+                currentTransferAmount = amount
                 showSendDialog = false
+                showPinDialog = true
+            }
+        )
+    }
+
+    if (showPinDialog) {
+        var pinInput by remember { mutableStateOf("") }
+        var pinError by remember { mutableStateOf<String?>(null) }
+        
+        AlertDialog(
+            onDismissRequest = { showPinDialog = false },
+            title = { Text("Enter UPI Security PIN", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("To authorize transfer of ₹${currentTransferAmount} to $currentTransferRecipient, please enter your 4-digit UPI PIN:")
+                    OutlinedTextField(
+                        value = pinInput,
+                        onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) pinInput = it },
+                        label = { Text("Security PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    pinError?.let {
+                        Text(text = it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val activeAccount = bankAccounts.firstOrNull()
+                        val correctPin = activeAccount?.pin ?: "1234"
+                        
+                        if (pinInput == correctPin) {
+                            var isBalanceValid = true
+                            if (activeAccount != null) {
+                                val remainingBal = activeAccount.balance - currentTransferAmount
+                                if (remainingBal < 0) {
+                                    pinError = "Insufficient balance in account!"
+                                    isBalanceValid = false
+                                } else {
+                                    viewModel.updateBankAccountBalance(activeAccount.id, remainingBal)
+                                }
+                            }
+                            
+                            if (isBalanceValid) {
+                                viewModel.addTransaction(
+                                    Transaction(
+                                        title = "UPI to $currentTransferRecipient",
+                                        amount = currentTransferAmount,
+                                        category = "Transfer",
+                                        type = TransactionType.EXPENSE
+                                    )
+                                )
+                                showPinDialog = false
+                            }
+                        } else {
+                            pinError = "Incorrect security PIN. Please try again!"
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary)
+                ) {
+                    Text("Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPinDialog = false }) {
+                    Text("Cancel")
+                }
             }
         )
     }
@@ -154,6 +267,13 @@ fun DashboardScreen(
                 )
                 showScanDialog = false
             }
+        )
+    }
+
+    if (selectedTransactionForReceipt != null) {
+        TransactionReceiptDialog(
+            transaction = selectedTransactionForReceipt!!,
+            onDismiss = { selectedTransactionForReceipt = null }
         )
     }
 
@@ -240,14 +360,14 @@ fun DashboardScreen(
                 }
             } else {
                 items(transactions.take(5)) { transaction ->
-                    TransactionItem(transaction)
+                    TransactionItem(transaction, onClick = { selectedTransactionForReceipt = transaction })
                     Spacer(modifier = Modifier.height(12.dp))
                 }
             }
 
             item {
                 Spacer(modifier = Modifier.height(12.dp))
-                AIInsightCard(aiNudge)
+                AIInsightCard(aiNudge, onClick = { onNavigate("ai_coach") })
                 Spacer(modifier = Modifier.height(20.dp))
             }
         }
@@ -434,9 +554,11 @@ fun AddBudgetDialog(
 }
 
 @Composable
-fun AIInsightCard(nudge: String) {
+fun AIInsightCard(nudge: String, onClick: () -> Unit = {}) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E8FF))
     ) {
@@ -593,6 +715,7 @@ fun NetWorthCard(balance: Double, goals: List<com.example.vaultflow.data.model.S
     val totalSavings = goals.sumOf { it.currentAmount }
     val netWorth = balance + totalSavings
     val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
+    var isVisible by remember { mutableStateOf(true) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -600,12 +723,41 @@ fun NetWorthCard(balance: Double, goals: List<com.example.vaultflow.data.model.S
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
     ) {
         Column(modifier = Modifier.padding(24.dp)) {
-            Text("Estimated Net Worth", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-            Text(currencyFormatter.format(netWorth), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Estimated Net Worth", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                IconButton(onClick = { isVisible = !isVisible }) {
+                    Icon(
+                        imageVector = if (isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                        contentDescription = "Toggle Balance",
+                        tint = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+            
+            Text(
+                text = if (isVisible) currencyFormatter.format(netWorth) else "••••••••",
+                color = Color.White,
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold
+            )
+            
             Spacer(modifier = Modifier.height(12.dp))
+            
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Liquid: ${currencyFormatter.format(balance)}", color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
-                Text("Saved: ${currencyFormatter.format(totalSavings)}", color = Color.White.copy(alpha = 0.9f), fontSize = 12.sp)
+                Text(
+                    text = if (isVisible) "Liquid: ${currencyFormatter.format(balance)}" else "Liquid: ••••••••",
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = if (isVisible) "Saved: ${currencyFormatter.format(totalSavings)}" else "Saved: ••••••••",
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 12.sp
+                )
             }
         }
     }
@@ -645,37 +797,66 @@ fun FinancialHealthCard() {
 fun SendDialog(onDismiss: () -> Unit, onConfirm: (String, Double) -> Unit) {
     var recipient by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
+    var errorState by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Send Money", fontWeight = FontWeight.Bold) },
+        title = { Text("UPI Transfer - Send Money", fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Transfer simulated funds securely to any UPI ID or recipient name.",
+                    fontSize = 12.sp,
+                    color = VaultTextLight
+                )
+
                 OutlinedTextField(
                     value = recipient,
                     onValueChange = { recipient = it },
-                    label = { Text("Recipient Name/ID") },
+                    placeholder = { Text("username@upi or name") },
+                    label = { Text("Recipient Name/UPI ID") },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Default.AlternateEmail, contentDescription = "UPI ID")
+                    },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
-                    label = { Text("Amount") },
+                    placeholder = { Text("0.00") },
+                    label = { Text("Amount (₹)") },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Default.LocalAtm, contentDescription = "Amount")
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                errorState?.let {
+                    Text(text = it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
                     val amountVal = amount.toDoubleOrNull() ?: 0.0
-                    if (recipient.isNotBlank() && amountVal > 0) {
-                        onConfirm(recipient, amountVal)
+                    if (recipient.isBlank()) {
+                        errorState = "Please enter a recipient UPI ID or Name"
+                        return@Button
                     }
+                    if (amountVal <= 0.0) {
+                        errorState = "Please enter a valid transfer amount"
+                        return@Button
+                    }
+                    onConfirm(recipient, amountVal)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary)
             ) {
-                Text("Send")
+                Text("Verify & Send")
             }
         },
         dismissButton = {
@@ -788,6 +969,114 @@ fun QRScannerDialog(onDismiss: () -> Unit, onResult: (String) -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+@Composable
+fun OnboardingSetupWizardOverlay(
+    onDismiss: () -> Unit,
+    onConfirm: (fullName: String, mpin: String) -> Unit,
+    onNavigateToWallet: () -> Unit
+) {
+    var fullName by remember { mutableStateOf("") }
+    var mpin by remember { mutableStateOf("") }
+    var confirmMpin by remember { mutableStateOf("") }
+    var currentSlide by remember { mutableStateOf(1) }
+    var errorState by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = {}, // Force setup completion
+        title = {
+            Text(
+                text = if (currentSlide == 1) "Initial App Setup" else "Bank Link Setup",
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (currentSlide == 1) {
+                    Text("Welcome to VaultFlow! Let's set up your profile name and secure 4-digit login MPIN:")
+                    OutlinedTextField(
+                        value = fullName,
+                        onValueChange = { fullName = it },
+                        label = { Text("Full Name") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = mpin,
+                        onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) mpin = it },
+                        label = { Text("Create 4-Digit MPIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = confirmMpin,
+                        onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) confirmMpin = it },
+                        label = { Text("Confirm 4-Digit MPIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Success",
+                        tint = VaultIncome,
+                        modifier = Modifier.size(64.dp).align(Alignment.CenterHorizontally)
+                    )
+                    Text(
+                        "Successfully Created!",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = VaultIncome,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                    Text(
+                        "To unlock the full potential of your AI Copilot, please link your bank account now.",
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                errorState?.let {
+                    Text(text = it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (currentSlide == 1) {
+                        if (fullName.isBlank()) {
+                            errorState = "Please enter your full name"
+                            return@Button
+                        }
+                        if (mpin.length < 4) {
+                            errorState = "Please set a secure 4-digit MPIN"
+                            return@Button
+                        }
+                        if (mpin != confirmMpin) {
+                            errorState = "Pins do not match. Please verify!"
+                            return@Button
+                        }
+                        
+                        onConfirm(fullName, mpin)
+                        currentSlide = 2
+                        errorState = null
+                    } else {
+                        onDismiss()
+                        onNavigateToWallet()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary)
+            ) {
+                Text(if (currentSlide == 1) "Save & Continue" else "Link Bank Account")
+            }
         }
     )
 }

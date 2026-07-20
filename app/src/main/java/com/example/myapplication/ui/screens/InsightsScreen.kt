@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,7 +40,7 @@ fun InsightsScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("AI Insights", fontWeight = FontWeight.Bold) },
+                title = { Text("AI Insights", fontWeight = FontWeight.Bold, color = VaultTextDark) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = VaultBackgroundLight)
             )
         },
@@ -80,7 +81,7 @@ fun SummaryCard(income: Double, expense: Double) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = VaultSurface)
     ) {
         Column(modifier = Modifier.padding(24.dp)) {
             Text("Monthly Overview", color = VaultTextLight, fontSize = 14.sp)
@@ -88,11 +89,11 @@ fun SummaryCard(income: Double, expense: Double) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
                     Text("Income", color = VaultIncome, fontWeight = FontWeight.Bold)
-                    Text(currencyFormatter.format(income), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(currencyFormatter.format(income), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = VaultTextDark)
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text("Expenses", color = VaultExpense, fontWeight = FontWeight.Bold)
-                    Text(currencyFormatter.format(expense), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(currencyFormatter.format(expense), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = VaultTextDark)
                 }
             }
         }
@@ -100,18 +101,29 @@ fun SummaryCard(income: Double, expense: Double) {
 }
 
 @Composable
-fun AIAnalysisItem(title: String, description: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {
+fun AIAnalysisItem(title: String, description: String, icon: ImageVector) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E8FF))
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = VaultSurface)
     ) {
-        Row(modifier = Modifier.padding(16.dp)) {
-            Icon(icon, contentDescription = null, tint = VaultPrimary)
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(title, fontWeight = FontWeight.Bold, color = VaultPrimary)
-                Text(description, fontSize = 14.sp, color = VaultTextDark)
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(40.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = VaultPrimary.copy(alpha = 0.1f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = VaultPrimary)
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = title, fontWeight = FontWeight.Bold, color = VaultTextDark, fontSize = 16.sp)
+                Text(text = description, color = VaultTextLight, fontSize = 13.sp)
             }
         }
     }

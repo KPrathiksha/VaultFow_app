@@ -86,7 +86,7 @@ fun AICoachScreen(
             Surface(
                 tonalElevation = 8.dp,
                 modifier = Modifier.fillMaxWidth(),
-                color = Color.White
+                color = VaultSurface
             ) {
                 Row(
                     modifier = Modifier
@@ -133,7 +133,7 @@ fun ChatBubble(message: ChatMessage) {
         horizontalAlignment = if (message.isUser) Alignment.End else Alignment.Start
     ) {
         Surface(
-            color = if (message.isUser) VaultPrimary else Color(0xFFF3F4F6),
+            color = if (message.isUser) VaultPrimary else VaultSurface,
             shape = RoundedCornerShape(
                 topStart = 16.dp,
                 topEnd = 16.dp,

@@ -1,0 +1,19 @@
+{
+  "capabilities": {
+    "platformName": "Android",
+    "appium:automationName": "UiAutomator2",
+    "appium:deviceName": "Android Emulator",
+    "appium:app": "../app/build/outputs/apk/debug/app-debug.apk",
+    "appium:appPackage": "com.example.vaultflow",
+    "appium:appActivity": "com.example.vaultflow.MainActivity",
+    "appium:noReset": false,
+    "appium:fullReset": true,
+    "appium:autoGrantPermissions": true,
+    "appium:newCommandTimeout": 300
+  },
+  "appiumServer": {
+    "hostname": "127.0.0.1",
+    "port": 4723,
+    "path": "/"
+  }
+}

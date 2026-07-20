@@ -7,16 +7,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.vaultflow.data.model.Transaction
 import com.example.vaultflow.ui.components.TransactionItem
+import com.example.vaultflow.ui.components.TransactionReceiptDialog
 import com.example.vaultflow.ui.theme.VaultBackgroundLight
 import com.example.vaultflow.ui.theme.VaultTextDark
 import com.example.vaultflow.ui.theme.VaultTextLight
@@ -29,6 +29,14 @@ fun TransactionsScreen(
     onBack: () -> Unit = {}
 ) {
     val transactions by viewModel.transactions.collectAsState()
+    var selectedTransactionForReceipt by remember { mutableStateOf<Transaction?>(null) }
+
+    if (selectedTransactionForReceipt != null) {
+        TransactionReceiptDialog(
+            transaction = selectedTransactionForReceipt!!,
+            onDismiss = { selectedTransactionForReceipt = null }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -64,7 +72,7 @@ fun TransactionsScreen(
             } else {
                 item { Spacer(modifier = Modifier.height(16.dp)) }
                 items(transactions) { transaction ->
-                    TransactionItem(transaction)
+                    TransactionItem(transaction, onClick = { selectedTransactionForReceipt = transaction })
                     Spacer(modifier = Modifier.height(12.dp))
                 }
                 item { Spacer(modifier = Modifier.height(20.dp)) }

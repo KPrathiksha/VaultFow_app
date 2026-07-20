@@ -9,10 +9,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.google.ai.client.generativeai.GenerativeModel
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
 class VaultViewModel : ViewModel() {
     private val repository = FirestoreRepository()
-    private val geminiRepository = GeminiRepository("AIzaSyCwBww3l4dMGwK_0QAYLXoTNBzM2whACE4")
+    private var geminiRepository = GeminiRepository("YOUR_GEMINI_API_KEY")
 
     private val _transactions = MutableStateFlow<List<Transaction>>(emptyList())
     val transactions: StateFlow<List<Transaction>> = _transactions
@@ -26,8 +31,17 @@ class VaultViewModel : ViewModel() {
     private val _subscriptions = MutableStateFlow<List<Subscription>>(emptyList())
     val subscriptions: StateFlow<List<Subscription>> = _subscriptions
 
+    private val _bankAccounts = MutableStateFlow<List<BankAccount>>(emptyList())
+    val bankAccounts: StateFlow<List<BankAccount>> = _bankAccounts
+
+    private val _linkedBanks = MutableStateFlow<List<LinkedBank>>(emptyList())
+    val linkedBanks: StateFlow<List<LinkedBank>> = _linkedBanks
+
     private val _userProfile = MutableStateFlow<UserProfile?>(null)
     val userProfile: StateFlow<UserProfile?> = _userProfile
+
+    private val _isProfileLoaded = MutableStateFlow(false)
+    val isProfileLoaded: StateFlow<Boolean> = _isProfileLoaded
 
     private val _totalBalance = MutableStateFlow(0.0)
     val totalBalance: StateFlow<Double> = _totalBalance
@@ -47,10 +61,37 @@ class VaultViewModel : ViewModel() {
         loadData()
     }
 
+    private fun writeTransactionsToHistoryJson(list: List<Transaction>) {
+        try {
+            val array = org.json.JSONArray()
+            list.forEach { tx ->
+                val obj = org.json.JSONObject()
+                obj.put("id", tx.id)
+                obj.put("title", tx.title)
+                obj.put("amount", tx.amount)
+                obj.put("category", tx.category)
+                obj.put("type", tx.type.name)
+                obj.put("date", tx.date?.seconds ?: (System.currentTimeMillis() / 1000))
+                array.put(obj)
+            }
+            val file = java.io.File("/data/data/com.example.vaultflow/files/history.json")
+            file.parentFile?.let {
+                if (!it.exists()) {
+                    it.mkdirs()
+                }
+            }
+            file.writeText(array.toString(2), Charsets.UTF_8)
+            android.util.Log.d("VaultViewModel", "Saved ${list.size} transactions to history.json")
+        } catch (e: Exception) {
+            android.util.Log.e("VaultViewModel", "Failed to write history.json: ${e.message}", e)
+        }
+    }
+
     private fun loadData() {
         viewModelScope.launch {
             repository.getTransactions().collectLatest {
                 _transactions.value = it
+                writeTransactionsToHistoryJson(it)
                 updateAiNudge(it)
             }
         }
@@ -72,15 +113,19 @@ class VaultViewModel : ViewModel() {
         viewModelScope.launch {
             repository.getUserProfile().collectLatest {
                 _userProfile.value = it
+                _isProfileLoaded.value = true // Sync profile loaded status cleanly!
             }
         }
         viewModelScope.launch {
-            val userDoc = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                .collection("users")
-                .document(com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: "")
-            
-            userDoc.addSnapshotListener { snapshot, _ ->
-                _totalBalance.value = snapshot?.getDouble("totalBalance") ?: 0.0
+            repository.getBankAccounts().collectLatest {
+                _bankAccounts.value = it
+                // Dynamically sum up the balance of all bank accounts in real-time!
+                _totalBalance.value = it.sumOf { acc -> acc.balance }
+            }
+        }
+        viewModelScope.launch {
+            repository.getLinkedBanks().collectLatest {
+                _linkedBanks.value = it
             }
         }
     }
@@ -103,10 +148,28 @@ class VaultViewModel : ViewModel() {
         viewModelScope.launch {
             _isTyping.value = true
             try {
-                val response = geminiRepository.getGeneralResponse(text) ?: "I'm having trouble connecting to my financial brain. Please check your internet!"
+                // Read the actual local history.json file for real-time AI context!
+                val file = java.io.File("/data/data/com.example.vaultflow/files/history.json")
+                val jsonHistoryText = if (file.exists()) {
+                    file.readText(Charsets.UTF_8)
+                } else {
+                    "[]"
+                }
+
+                // Construct system prompt with local history context
+                val promptWithContext = """
+                    You are VaultFlow, an AI-powered financial copilot.
+                    Below is the user's real financial transaction history, read dynamically from their local 'history.json' file:
+                    $jsonHistoryText
+                    
+                    User's Question: $text
+                    Please analyze their history.json data and provide a professional, personalized, and highly actionable response. Keep your reply concise, engaging, and clear.
+                """.trimIndent()
+
+                val response = geminiRepository.getGeneralResponse(promptWithContext) ?: "I'm having trouble connecting to my financial brain. Please check your internet!"
                 _chatMessages.value = _chatMessages.value + com.example.vaultflow.ui.screens.ChatMessage(response, false)
             } catch (e: Exception) {
-                _chatMessages.value = _chatMessages.value + com.example.vaultflow.ui.screens.ChatMessage("Oops, something went wrong. Let's try that again!", false)
+                _chatMessages.value = _chatMessages.value + com.example.vaultflow.ui.screens.ChatMessage("Oops, I had trouble analyzing your local transaction file. Let's try again!", false)
             } finally {
                 _isTyping.value = false
             }
@@ -129,6 +192,12 @@ class VaultViewModel : ViewModel() {
         }
     }
 
+    fun updateSavingsGoalProgress(goalId: String, newCurrentAmount: Double) {
+        viewModelScope.launch {
+            repository.updateSavingsGoalProgress(goalId, newCurrentAmount)
+        }
+    }
+
     fun setBudget(budget: Budget) {
         viewModelScope.launch {
             repository.setBudget(budget)
@@ -144,6 +213,80 @@ class VaultViewModel : ViewModel() {
     fun addSubscription(sub: Subscription) {
         viewModelScope.launch {
             repository.addSubscription(sub)
+        }
+    }
+
+    fun addBankAccount(account: BankAccount) {
+        viewModelScope.launch {
+            repository.addBankAccount(account)
+        }
+    }
+
+    fun updateBankAccountBalance(accountId: String, newBalance: Double) {
+        viewModelScope.launch {
+            repository.updateBankAccountBalance(accountId, newBalance)
+        }
+    }
+
+    fun addLinkedBank(bank: LinkedBank) {
+        viewModelScope.launch {
+            repository.addLinkedBank(bank)
+        }
+    }
+
+    fun updateAiApiKey(newKey: String, newBaseUrl: String = "") {
+        geminiRepository = GeminiRepository(newKey, newBaseUrl)
+    }
+
+    suspend fun validateGeminiKey(testKey: String, testBaseUrl: String = ""): Boolean = withContext(Dispatchers.IO) {
+        if (testBaseUrl.isNotBlank()) {
+            try {
+                val client = okhttp3.OkHttpClient()
+                val mediaType = "application/json; charset=utf-8".toMediaType()
+                val jsonPayload = """
+                    {
+                        "contents": [{
+                            "parts": [{
+                                "text": "Hi"
+                            }]
+                        }]
+                    }
+                """.trimIndent()
+                val url = if (testBaseUrl.endsWith("/")) {
+                    "${testBaseUrl}v1beta/models/gemini-1.5-flash:generateContent?key=$testKey"
+                } else {
+                    "$testBaseUrl/v1beta/models/gemini-1.5-flash:generateContent?key=$testKey"
+                }
+
+                val requestBody = jsonPayload.toRequestBody(mediaType)
+                val request = okhttp3.Request.Builder()
+                    .url(url)
+                    .post(requestBody)
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    response.isSuccessful
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("VaultViewModel", "Gemini key validation via custom proxy failed: ${e.message}")
+                false
+            }
+        } else {
+            try {
+                val testModel = GenerativeModel(
+                    modelName = "gemini-1.5-flash",
+                    apiKey = testKey
+                )
+                val response = testModel.generateContent(
+                    com.google.ai.client.generativeai.type.content {
+                        text("Hi")
+                    }
+                )
+                response.text != null
+            } catch (e: Exception) {
+                android.util.Log.e("VaultViewModel", "Gemini Key Validation failed: ${e.message}")
+                false
+            }
         }
     }
 }

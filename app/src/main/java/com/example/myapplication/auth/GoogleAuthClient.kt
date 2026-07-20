@@ -43,6 +43,48 @@ class GoogleAuthClient(private val context: Context) {
         }
     }
 
+    suspend fun signInWithEmail(email: String, password: String): AuthResult {
+        return try {
+            auth.signInWithEmailAndPassword(email, password).await()
+            AuthResult.Success(auth.currentUser?.displayName ?: auth.currentUser?.email?.substringBefore("@") ?: "User")
+        } catch (e: com.google.firebase.auth.FirebaseAuthInvalidUserException) {
+            AuthResult.Error("User not found. Signup here")
+        } catch (e: Exception) {
+            android.util.Log.e("FirebaseAuthClient", "Email sign in failed", e)
+            AuthResult.Error(e.message ?: "Authentication failed")
+        }
+    }
+
+    suspend fun signUpWithEmail(email: String, password: String, displayName: String): AuthResult {
+        return try {
+            val userResult = auth.createUserWithEmailAndPassword(email, password).await()
+            val user = userResult.user
+            if (user != null && displayName.isNotBlank()) {
+                val profileUpdates = com.google.firebase.auth.UserProfileChangeRequest.Builder()
+                    .setDisplayName(displayName)
+                    .build()
+                user.updateProfile(profileUpdates).await()
+
+                // Save user profile document in Firestore collection
+                try {
+                    val firestoreRepo = com.example.vaultflow.data.repository.FirestoreRepository()
+                    val profile = com.example.vaultflow.data.model.UserProfile(
+                        uid = user.uid,
+                        displayName = displayName,
+                        email = email
+                    )
+                    firestoreRepo.saveUserProfile(profile)
+                } catch (fsEx: Exception) {
+                    android.util.Log.e("FirebaseAuthClient", "Firestore profile document save failed", fsEx)
+                }
+            }
+            AuthResult.Success(auth.currentUser?.displayName ?: displayName.ifBlank { "User" })
+        } catch (e: Exception) {
+            android.util.Log.e("FirebaseAuthClient", "Email sign up failed", e)
+            AuthResult.Error(e.message ?: "Sign up failed")
+        }
+    }
+
     fun signOut() {
         auth.signOut()
         googleSignInClient.signOut()

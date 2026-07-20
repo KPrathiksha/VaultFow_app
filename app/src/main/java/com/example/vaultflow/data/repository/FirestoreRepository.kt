@@ -117,7 +117,13 @@ class FirestoreRepository {
 
     suspend fun addSavingsGoal(goal: SavingsGoal) {
         val userDoc = getUserDoc() ?: return
-        userDoc.collection("savings_goals").add(goal).await()
+        val goalRef = userDoc.collection("savings_goals").document()
+        goalRef.set(goal.copy(id = goalRef.id)).await()
+    }
+
+    suspend fun updateSavingsGoalProgress(goalId: String, newCurrentAmount: Double) {
+        val userDoc = getUserDoc() ?: return
+        userDoc.collection("savings_goals").document(goalId).update("currentAmount", newCurrentAmount).await()
     }
 
     fun getBudgets(): Flow<List<Budget>> = callbackFlow {
@@ -143,5 +149,65 @@ class FirestoreRepository {
         val userDoc = getUserDoc() ?: return 0.0
         val snapshot = userDoc.get().await()
         return snapshot.getDouble("totalBalance") ?: 0.0
+    }
+
+    fun getBankAccounts(): Flow<List<BankAccount>> = callbackFlow {
+        val userDoc = getUserDoc() ?: return@callbackFlow
+        val subscription = userDoc.collection("bank_accounts")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val accounts = snapshot?.toObjects(BankAccount::class.java) ?: emptyList()
+                // Decrypt sensitive details in real-time
+                val decryptedAccounts = accounts.map { acc ->
+                    acc.copy(
+                        accountNumber = com.example.vaultflow.util.CryptoHelper.decrypt(acc.accountNumber),
+                        accountHolder = com.example.vaultflow.util.CryptoHelper.decrypt(acc.accountHolder),
+                        pin = com.example.vaultflow.util.CryptoHelper.decrypt(acc.pin)
+                    )
+                }
+                trySend(decryptedAccounts)
+            }
+        awaitClose { subscription.remove() }
+    }
+
+    suspend fun addBankAccount(account: BankAccount) {
+        val userDoc = getUserDoc() ?: return
+        val accRef = userDoc.collection("bank_accounts").document()
+        // Encrypt sensitive account number, holder, and security PIN using AES before uploading
+        val encryptedAccount = account.copy(
+            id = accRef.id,
+            accountNumber = com.example.vaultflow.util.CryptoHelper.encrypt(account.accountNumber),
+            accountHolder = com.example.vaultflow.util.CryptoHelper.encrypt(account.accountHolder),
+            pin = com.example.vaultflow.util.CryptoHelper.encrypt(account.pin)
+        )
+        accRef.set(encryptedAccount).await()
+    }
+
+    suspend fun updateBankAccountBalance(accountId: String, newBalance: Double) {
+        val userDoc = getUserDoc() ?: return
+        userDoc.collection("bank_accounts").document(accountId).update("balance", newBalance).await()
+    }
+
+    fun getLinkedBanks(): Flow<List<LinkedBank>> = callbackFlow {
+        val userDoc = getUserDoc() ?: return@callbackFlow
+        val subscription = userDoc.collection("linked_banks")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val banks = snapshot?.toObjects(LinkedBank::class.java) ?: emptyList()
+                trySend(banks)
+            }
+        awaitClose { subscription.remove() }
+    }
+
+    suspend fun addLinkedBank(bank: LinkedBank) {
+        val userDoc = getUserDoc() ?: return
+        val bankRef = userDoc.collection("linked_banks").document()
+        bankRef.set(bank.copy(id = bankRef.id)).await()
     }
 }

@@ -10,6 +10,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Subscriptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -36,8 +38,15 @@ fun SubscriptionsScreen(
     if (showAddDialog) {
         AddSubscriptionDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, amount, cycle ->
-                viewModel.addSubscription(Subscription(name = name, amount = amount, billingCycle = cycle))
+            onConfirm = { name, amount, cycle, category ->
+                viewModel.addSubscription(
+                    Subscription(
+                        name = name,
+                        amount = amount,
+                        billingCycle = cycle,
+                        category = category
+                    )
+                )
                 showAddDialog = false
             }
         )
@@ -46,13 +55,18 @@ fun SubscriptionsScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Subscriptions", fontWeight = FontWeight.Bold) },
+                title = { Text("Subscriptions", fontWeight = FontWeight.Bold, color = VaultTextDark) },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = VaultBackgroundLight)
             )
         },
         bottomBar = { VaultBottomNavigation(currentRoute = "subscriptions", onNavigate = onNavigate) },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }, containerColor = VaultPrimary, contentColor = Color.White) {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = VaultPrimary,
+                contentColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Subscription")
             }
         }
@@ -68,8 +82,6 @@ fun SubscriptionsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 SubscriptionSummary(subscriptions)
                 Spacer(modifier = Modifier.height(24.dp))
-                Text("Your Active Subscriptions", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = VaultTextDark)
-                Spacer(modifier = Modifier.height(12.dp))
             }
 
             if (subscriptions.isEmpty()) {
@@ -79,7 +91,74 @@ fun SubscriptionsScreen(
                     }
                 }
             } else {
-                items(subscriptions) { SubscriptionItem(it) }
+                val ottServices = subscriptions.filter { it.category.equals("OTT", true) }
+                val wifiServices = subscriptions.filter { it.category.equals("WIFI", true) }
+                val mobileServices = subscriptions.filter { it.category.equals("MOBILE", true) }
+                val otherServices = subscriptions.filter { 
+                    !it.category.equals("OTT", true) && 
+                    !it.category.equals("WIFI", true) && 
+                    !it.category.equals("MOBILE", true)
+                }
+
+                // 1. OTT Services
+                if (ottServices.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "🍿 OTT Services",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = VaultTextDark,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                    items(ottServices) { SubscriptionItem(it) }
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                }
+
+                // 2. Wi-Fi & Broadband Services
+                if (wifiServices.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "🌐 Wi-Fi & Broadband",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = VaultTextDark,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                    items(wifiServices) { SubscriptionItem(it) }
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                }
+
+                // 3. Mobile Recharges
+                if (mobileServices.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "📱 Mobile Recharges",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = VaultTextDark,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                    items(mobileServices) { SubscriptionItem(it) }
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                }
+
+                // 4. Other Services
+                if (otherServices.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "⚙️ Other Services",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = VaultTextDark,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                    items(otherServices) { SubscriptionItem(it) }
+                    item { Spacer(modifier = Modifier.height(12.dp)) }
+                }
             }
         }
     }
@@ -93,11 +172,11 @@ fun SubscriptionSummary(subs: List<Subscription>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
+        colors = CardDefaults.cardColors(containerColor = VaultSurface)
     ) {
         Column(modifier = Modifier.padding(24.dp)) {
-            Text("Monthly recurring expense", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-            Text(currencyFormatter.format(totalMonthly), color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Text("Monthly recurring expense", color = VaultTextLight, fontSize = 14.sp)
+            Text(currencyFormatter.format(totalMonthly), color = VaultPrimary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -106,12 +185,19 @@ fun SubscriptionSummary(subs: List<Subscription>) {
 fun SubscriptionItem(sub: Subscription) {
     val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = VaultSurface)
     ) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(modifier = Modifier.size(40.dp), shape = RoundedCornerShape(8.dp), color = VaultPrimary.copy(alpha = 0.1f)) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(40.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = VaultPrimary.copy(alpha = 0.1f)
+            ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(Icons.Default.Subscriptions, contentDescription = null, tint = VaultPrimary, modifier = Modifier.size(20.dp))
                 }
@@ -126,31 +212,92 @@ fun SubscriptionItem(sub: Subscription) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AddSubscriptionDialog(onDismiss: () -> Unit, onConfirm: (String, Double, String) -> Unit) {
+fun AddSubscriptionDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, amount: Double, cycle: String, category: String) -> Unit
+) {
     var name by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var cycle by remember { mutableStateOf("Monthly") }
+    var category by remember { mutableStateOf("OTT") }
+    var errorState by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Subscription") },
+        title = { Text("Add Subscription", fontWeight = FontWeight.Bold, color = VaultTextDark) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Service Name") })
-                OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("Amount") })
-                // Simple cycle selector
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Service Name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                    label = { Text("Amount (₹)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Text("Category:", fontSize = 12.sp, color = VaultTextLight)
+                
+                // FlowRow wrapping the category radio buttons beautifully
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = category == "OTT", onClick = { category = "OTT" })
+                        Text("🍿 OTT", color = VaultTextDark, fontSize = 12.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = category == "WIFI", onClick = { category = "WIFI" })
+                        Text("🌐 Wi-Fi", color = VaultTextDark, fontSize = 12.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = category == "MOBILE", onClick = { category = "MOBILE" })
+                        Text("📱 Mobile", color = VaultTextDark, fontSize = 12.sp)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = category == "Other", onClick = { category = "Other" })
+                        Text("⚙️ Other", color = VaultTextDark, fontSize = 12.sp)
+                    }
+                }
+
+                Text("Billing Cycle:", fontSize = 12.sp, color = VaultTextLight)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = cycle == "Monthly", onClick = { cycle = "Monthly" })
-                    Text("Monthly")
-                    Spacer(modifier = Modifier.width(16.dp))
+                    Text("Monthly", color = VaultTextDark, fontSize = 14.sp)
+                    Spacer(modifier = Modifier.width(20.dp))
                     RadioButton(selected = cycle == "Yearly", onClick = { cycle = "Yearly" })
-                    Text("Yearly")
+                    Text("Yearly", color = VaultTextDark, fontSize = 14.sp)
+                }
+
+                errorState?.let {
+                    Text(text = it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(name, amount.toDoubleOrNull() ?: 0.0, cycle) }) {
+            Button(
+                onClick = {
+                    val amountVal = amount.toDoubleOrNull()
+                    if (name.isBlank()) {
+                        errorState = "Please enter service name"
+                        return@Button
+                    }
+                    if (amountVal == null || amountVal <= 0.0) {
+                        errorState = "Please enter a valid billing amount"
+                        return@Button
+                    }
+                    onConfirm(name, amountVal, cycle, category)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary)
+            ) {
                 Text("Add")
             }
         },
