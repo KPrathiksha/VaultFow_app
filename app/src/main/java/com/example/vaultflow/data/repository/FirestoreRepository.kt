@@ -21,7 +21,8 @@ class FirestoreRepository {
         val userDoc = getUserDoc() ?: return@callbackFlow
         val subscription = userDoc.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                close(error)
+                android.util.Log.e("FirestoreRepository", "UserProfile listener error: ${error.message}")
+                trySend(null)
                 return@addSnapshotListener
             }
             val profile = snapshot?.toObject(UserProfile::class.java)
@@ -41,7 +42,8 @@ class FirestoreRepository {
             .orderBy("date", Query.Direction.DESCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("FirestoreRepository", "Transactions listener error: ${error.message}")
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val transactions = snapshot?.toObjects(Transaction::class.java) ?: emptyList()
@@ -87,7 +89,8 @@ class FirestoreRepository {
         val subscription = userDoc.collection("subscriptions")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("FirestoreRepository", "Subscriptions listener error: ${error.message}")
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val subs = snapshot?.toObjects(Subscription::class.java) ?: emptyList()
@@ -106,7 +109,8 @@ class FirestoreRepository {
         val subscription = userDoc.collection("savings_goals")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("FirestoreRepository", "SavingsGoals listener error: ${error.message}")
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val goals = snapshot?.toObjects(SavingsGoal::class.java) ?: emptyList()
@@ -131,7 +135,8 @@ class FirestoreRepository {
         val subscription = userDoc.collection("budgets")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("FirestoreRepository", "Budgets listener error: ${error.message}")
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val budgets = snapshot?.toObjects(Budget::class.java) ?: emptyList()
@@ -156,11 +161,11 @@ class FirestoreRepository {
         val subscription = userDoc.collection("bank_accounts")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("FirestoreRepository", "BankAccounts listener error: ${error.message}")
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val accounts = snapshot?.toObjects(BankAccount::class.java) ?: emptyList()
-                // Decrypt sensitive details in real-time
                 val decryptedAccounts = accounts.map { acc ->
                     acc.copy(
                         accountNumber = com.example.vaultflow.util.CryptoHelper.decrypt(acc.accountNumber),
@@ -176,7 +181,6 @@ class FirestoreRepository {
     suspend fun addBankAccount(account: BankAccount) {
         val userDoc = getUserDoc() ?: return
         val accRef = userDoc.collection("bank_accounts").document()
-        // Encrypt sensitive account number, holder, and security PIN using AES before uploading
         val encryptedAccount = account.copy(
             id = accRef.id,
             accountNumber = com.example.vaultflow.util.CryptoHelper.encrypt(account.accountNumber),
@@ -196,7 +200,8 @@ class FirestoreRepository {
         val subscription = userDoc.collection("linked_banks")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    android.util.Log.e("FirestoreRepository", "LinkedBanks listener error: ${error.message}")
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val banks = snapshot?.toObjects(LinkedBank::class.java) ?: emptyList()
