@@ -126,6 +126,18 @@ class MainActivity : ComponentActivity() {
                                         onNavigate = { route -> navController.navigate(route) }
                                     )
                                 }
+                                composable("subscriptions") {
+                                    SubscriptionsScreen(
+                                        viewModel = vaultViewModel,
+                                        onNavigate = { route -> navController.navigate(route) }
+                                    )
+                                }
+                                composable("transactions") {
+                                    TransactionsScreen(
+                                        viewModel = vaultViewModel,
+                                        onBack = { navController.popBackStack() }
+                                    )
+                                }
                             }
 
                             // Full-Screen MPIN Lock Screen Overlay (Animated fade out upon unlock!)
