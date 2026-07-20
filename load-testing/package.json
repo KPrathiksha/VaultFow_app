@@ -1,0 +1,1 @@
+{"name":"vaultflow-load-testing","private":true,"scripts":{"catalog":"node tests/catalog.cjs","preload":"node tests/catalog.cjs","load":"k6 run --log-output=file=reports/execution.log tests/vaultflow-load.js","report":"node tests/report.cjs","run":"npm run load && npm run report"},"engines":{"node":">=18"}}

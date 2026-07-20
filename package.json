@@ -1,0 +1,36 @@
+{
+  "name": "vaultflow_app_backup",
+  "version": "1.0.0",
+  "description": "A new Flutter project.",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "npm run test:appium:portfolio -- --report-only",
+    "test:appium:portfolio": "node selenium-tests/run-portfolio-suite.js",
+    "test:appium:portfolio:report": "node selenium-tests/run-portfolio-suite.js --report-only",
+    "test:selenium:e2e": "node selenium-tests/run-e2e.js",
+    "test:selenium:portfolio": "node selenium-tests/run-portfolio-suite.js",
+    "test:selenium:portfolio:report": "node selenium-tests/run-portfolio-suite.js --report-only"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KPrathiksha/vaultflow-app.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/KPrathiksha/vaultflow-app/issues"
+  },
+  "homepage": "https://github.com/KPrathiksha/vaultflow-app#readme",
+  "dependencies": {
+    "appium": "^3.5.0",
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
+    "webdriverio": "^9.28.0"
+  }
+}

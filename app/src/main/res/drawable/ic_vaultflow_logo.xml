@@ -1,0 +1,43 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Deep Navy Background -->
+    <path
+        android:pathData="M100,100m-90,0a90,90 0,1 1,180 0a90,90 0,1 1,-180 0"
+        android:fillColor="#0F172A"/>
+
+    <!-- Wallet Body (Folded Style) -->
+    <path
+        android:pathData="M45,70 L155,70 C160,70 165,75 165,80 L165,140 C165,145 160,150 155,150 L45,150 C40,150 35,145 35,140 L35,80 C35,75 40,70 45,70 Z"
+        android:fillColor="#6366F1"/>
+
+    <!-- Wallet Flap -->
+    <path
+        android:pathData="M110,85 L155,85 C160,85 165,90 165,95 L165,125 C165,130 160,135 155,135 L110,135 C105,135 100,130 100,125 L100,95 C100,90 105,85 110,85 Z"
+        android:fillColor="#4F46E5"/>
+
+    <!-- Indigo "Flow" Stripe -->
+    <path
+        android:pathData="M35,100 L165,100"
+        android:strokeWidth="4"
+        android:strokeColor="#818CF8"
+        android:strokeAlpha="0.4"/>
+
+    <!-- Golden Lock/Button -->
+    <path
+        android:pathData="M125,110m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0"
+        android:fillColor="#FACC15"/>
+
+    <!-- Energy "Flow" particles -->
+    <path
+        android:pathData="M175,70m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0"
+        android:fillColor="#10B981"/>
+    <path
+        android:pathData="M185,95m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"
+        android:fillColor="#10B981"
+        android:alpha="0.6"/>
+
+</vector>

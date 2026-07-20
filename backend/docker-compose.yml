@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  backend-app:
+    build: .
+    container_name: vaultflow_backend
+    ports:
+      - '5001:5001'
+    environment:
+      - PORT=5001
+      - MONGO_URI=mongodb://mongodb:27017/vaultflow
+      - JWT_SECRET=f7e3c9a2d8b4e6a0d2c5e4f3a7b9c1d0e5f2a1b9c8d7e6f5a4b3c2d1e0f9a8b7
+      - NODE_ENV=development
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - mongodb
+    networks:
+      - vaultflow_network
+
+  mongodb:
+    image: mongo:6.0
+    container_name: vaultflow_mongodb
+    ports:
+      - '27017:27017'
+    volumes:
+      - vaultflow_db_data:/data/db
+    networks:
+      - vaultflow_network
+
+volumes:
+  vaultflow_db_data:
+
+networks:
+  vaultflow_network:
+    driver: bridge

@@ -1,0 +1,393 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "VaultFlow Personal Finance Manager API",
+    "description": "Production-ready REST API backend for the VaultFlow Flutter personal finance manager. Features JWT authentication, transaction tracking, budgets, analytical trends, and rule-based financial AI insights.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5001",
+      "description": "Local Development Server"
+    }
+  ],
+  "paths": {
+    "/api/auth/register": {
+      "post": {
+        "summary": "Register a new user",
+        "description": "Validates inputs, hashes password, saves user record, and yields a JWT auth token.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "password"],
+                "properties": {
+                  "name": { "type": "string", "example": "Prathiksha Rao" },
+                  "email": { "type": "string", "example": "prathiksha@vaultflow.com" },
+                  "password": { "type": "string", "example": "password123", "minLength": 6 },
+                  "currency": { "type": "string", "example": "₹", "default": "₹" },
+                  "monthlyBudget": { "type": "number", "example": 50000, "default": 0 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "token": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIsIn..." },
+                    "user": { "$ref": "#/components/schemas/User" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid input / Duplicate email payload" }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "summary": "Login user",
+        "description": "Authenticates credentials and signs a JWT valid for 7 days.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "example": "prathiksha@vaultflow.com" },
+                  "password": { "type": "string", "example": "password123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "token": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIsIn..." },
+                    "user": { "$ref": "#/components/schemas/User" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Invalid login email/password combination" }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "summary": "Get authenticated user profile",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "User profile returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "user": { "$ref": "#/components/schemas/User" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized token" }
+        }
+      }
+    },
+    "/api/transactions": {
+      "get": {
+        "summary": "Get all user transactions",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "type", "in": "query", "schema": { "type": "string", "enum": ["income", "expense"] } },
+          { "name": "category", "in": "query", "schema": { "type": "string" } },
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of transactions returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "count": { "type": "integer", "example": 2 },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "page": { "type": "integer", "example": 1 },
+                        "limit": { "type": "integer", "example": 20 },
+                        "totalPages": { "type": "integer", "example": 1 },
+                        "total": { "type": "integer", "example": 2 }
+                      }
+                    },
+                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/Transaction" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create new transaction",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["amount", "category", "type"],
+                "properties": {
+                  "amount": { "type": "number", "example": 1250 },
+                  "category": { "type": "string", "example": "Food" },
+                  "type": { "type": "string", "enum": ["income", "expense"], "example": "expense" },
+                  "date": { "type": "string", "format": "date-time", "example": "2026-05-26T12:00:00Z" },
+                  "note": { "type": "string", "example": "Grocery shopping at Spencer's" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Transaction created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": { "$ref": "#/components/schemas/Transaction" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transactions/summary": {
+      "get": {
+        "summary": "Get aggregate financial summary",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregations computed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "totalIncome": { "type": "number", "example": 70000 },
+                        "totalExpense": { "type": "number", "example": 25000 },
+                        "balance": { "type": "number", "example": 45000 },
+                        "currency": { "type": "string", "example": "₹" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/budgets/progress": {
+      "get": {
+        "summary": "Retrieve budget spent thresholds vs targets",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "month", "in": "query", "schema": { "type": "integer" } },
+          { "name": "year", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Spent ratios fetched successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "budgetId": { "type": "string" },
+                          "category": { "type": "string", "example": "Food" },
+                          "amount": { "type": "number", "example": 6000 },
+                          "spent": { "type": "number", "example": 5350 },
+                          "remaining": { "type": "number", "example": 650 },
+                          "percentage": { "type": "number", "example": 89.17 },
+                          "isOverBudget": { "type": "boolean", "example": false }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/insights/generate": {
+      "post": {
+        "summary": "Manually trigger background AI analytics checking",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Successfully refreshed insights lists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "AI Insights generated and refreshed successfully" },
+                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/Insight" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bank/sync": {
+      "post": {
+        "summary": "Simulate institution synchronization",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["bankId"],
+                "properties": {
+                  "bankId": { "type": "string", "example": "hdfc" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mock items synchronized and budget figures recalculated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Successfully synchronized 4 transactions from HDFC Bank." },
+                    "count": { "type": "integer", "example": 4 },
+                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/Transaction" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "example": "Prathiksha Rao" },
+          "email": { "type": "string", "example": "prathiksha@vaultflow.com" },
+          "currency": { "type": "string", "example": "₹" },
+          "monthlyBudget": { "type": "number", "example": 50000 },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Transaction": {
+        "type": "object",
+        "properties": {
+          "transactionId": { "type": "string", "format": "uuid" },
+          "userId": { "type": "string" },
+          "amount": { "type": "number", "example": 1500 },
+          "category": { "type": "string", "example": "Food" },
+          "type": { "type": "string", "enum": ["income", "expense"], "example": "expense" },
+          "date": { "type": "string", "format": "date-time" },
+          "note": { "type": "string", "example": "Dinner with family" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Budget": {
+        "type": "object",
+        "properties": {
+          "budgetId": { "type": "string", "format": "uuid" },
+          "userId": { "type": "string" },
+          "category": { "type": "string", "example": "Food" },
+          "amount": { "type": "number", "example": 6000 },
+          "month": { "type": "integer", "minimum": 1, "maximum": 12 },
+          "year": { "type": "integer", "example": 2026 },
+          "spent": { "type": "number", "example": 5350 },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Insight": {
+        "type": "object",
+        "properties": {
+          "insightId": { "type": "string", "format": "uuid" },
+          "userId": { "type": "string" },
+          "type": { "type": "string", "enum": ["spending_alert", "savings_tip", "budget_warning", "monthly_summary"] },
+          "message": { "type": "string", "example": "You spent 110% more on Shopping this month..." },
+          "isRead": { "type": "boolean", "default": false },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}
