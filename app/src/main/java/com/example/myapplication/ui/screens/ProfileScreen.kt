@@ -359,8 +359,11 @@ fun ConfigureApiDialog(
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("vaultflow_prefs", android.content.Context.MODE_PRIVATE) }
     
-    var apiKeyInput by remember { mutableStateOf(prefs.getString("gemini_api_key", "") ?: "") }
-    var baseUrlInput by remember { mutableStateOf(prefs.getString("gemini_base_url", "") ?: "") }
+    val savedKey = prefs.getString("gemini_api_key", "") ?: ""
+    val savedUrl = prefs.getString("gemini_base_url", "") ?: ""
+    val initialInput = if (savedUrl.isNotBlank()) savedUrl else savedKey
+
+    var apiInput by remember { mutableStateOf(initialInput) }
     var keyVisible by remember { mutableStateOf(false) }
     var isValidating by remember { mutableStateOf(false) }
     var feedbackState by remember { mutableStateOf<String?>(null) }
@@ -375,35 +378,25 @@ fun ConfigureApiDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Configure your own personal Google Gemini API Key and custom Endpoint Base URL to power the AI Coach natively.",
+                    text = "Configure your personal Google Gemini API Key or Custom Proxy Base URL to power your AI Coach natively.",
                     fontSize = 12.sp,
                     color = VaultTextLight
                 )
 
                 OutlinedTextField(
-                    value = apiKeyInput,
-                    onValueChange = { apiKeyInput = it },
-                    label = { Text("Gemini API Key") },
-                    placeholder = { Text("AIzaSy...") },
+                    value = apiInput,
+                    onValueChange = { apiInput = it },
+                    label = { Text("Gemini API Key or Proxy URL") },
+                    placeholder = { Text("Enter AIzaSy... or https://...") },
                     singleLine = true,
                     enabled = !isValidating && !isSuccess,
                     visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         val image = if (keyVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
                         IconButton(onClick = { keyVisible = !keyVisible }, enabled = !isValidating && !isSuccess) {
-                            Icon(imageVector = image, contentDescription = "Toggle key visibility")
+                            Icon(imageVector = image, contentDescription = "Toggle visibility")
                         }
                     },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = baseUrlInput,
-                    onValueChange = { baseUrlInput = it },
-                    label = { Text("Custom Base URL (Optional)") },
-                    placeholder = { Text("https://generativelanguage.googleapis.com") },
-                    singleLine = true,
-                    enabled = !isValidating && !isSuccess,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -414,7 +407,7 @@ fun ConfigureApiDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = VaultPrimary)
-                        Text("Verifying API with Custom Server...", fontSize = 12.sp, color = VaultTextLight)
+                        Text("Verifying API Credentials...", fontSize = 12.sp, color = VaultTextLight)
                     }
                 }
 
@@ -431,8 +424,9 @@ fun ConfigureApiDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (apiKeyInput.isBlank()) {
-                        feedbackState = "Please enter an API Key"
+                    val trimmedInput = apiInput.trim()
+                    if (trimmedInput.isBlank()) {
+                        feedbackState = "Please enter an API Key or Proxy URL"
                         return@Button
                     }
                     
@@ -445,14 +439,18 @@ fun ConfigureApiDialog(
                         isValidating = true
                         feedbackState = null
                         
-                        // Execute on-device validation with custom base URL
-                        val isValid = viewModel.validateGeminiKey(apiKeyInput, baseUrlInput)
+                        val isUrl = trimmedInput.startsWith("http://", true) || trimmedInput.startsWith("https://", true)
+                        val testKey = if (isUrl) "dummy_key_for_proxy" else trimmedInput
+                        val testBaseUrl = if (isUrl) trimmedInput else ""
+
+                        // Execute on-device validation with custom credentials
+                        val isValid = viewModel.validateGeminiKey(testKey, testBaseUrl)
                         isValidating = false
                         
                         if (isValid) {
                             isSuccess = true
                             feedbackState = "Added successfully!"
-                            onConfirm(apiKeyInput, baseUrlInput)
+                            onConfirm(testKey, testBaseUrl)
                         } else {
                             isSuccess = false
                             feedbackState = "Invalid API setup. Please verify credentials!"
