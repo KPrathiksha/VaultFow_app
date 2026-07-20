@@ -146,7 +146,7 @@ async function main() {
   printSummary(summary, executionTime);
 
   console.log('');
-  console.log('Reports generated in selenium-tests/reports');
+  console.log('Reports generated in Appium_tests/reports');
   console.log(`Report generation time: ${formatDuration(Date.now() - startedAt)}`);
 
   if (summary.failed > 0) {

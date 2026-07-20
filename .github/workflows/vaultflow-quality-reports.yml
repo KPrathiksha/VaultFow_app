@@ -1,0 +1,306 @@
+name: VaultFlow Unified Quality Verification
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+    inputs:
+      run_live_load_test:
+        description: Run the 100-VU k6 profile against the configured load-test deployment
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  verify-project:
+    name: Verify Project Setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify required project files
+        run: |
+          test -f pubspec.yaml
+          test -f backend/package.json
+          test -f backend/docker-compose.yml
+          test -f selenium-tests/pom.xml
+          test -f load-testing/tests/vaultflow-load.js
+          test -f vulnerability-testing/tests/security-suite.cjs
+          node --version
+          echo "Project structure verified." >> "$GITHUB_STEP_SUMMARY"
+
+  backend-api-tests:
+    name: Run Backend API Tests
+    runs-on: ubuntu-latest
+    needs: verify-project
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - name: Run Jest API tests with MongoDB
+        env:
+          MONGO_URI: mongodb://localhost:27017/vaultflow_test
+          JWT_SECRET: ci-only-secret
+        run: npm test
+
+  frontend-build:
+    name: Run Frontend Build
+    runs-on: ubuntu-latest
+    needs: verify-project
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze frontend (non-blocking quality findings)
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - run: flutter test
+      - run: flutter build web --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vaultflow-web-build
+          path: build/web
+          if-no-files-found: error
+          retention-days: 14
+
+  mobile-e2e-report:
+    name: Run Mobile E2E Report
+    runs-on: ubuntu-latest
+    needs: verify-project
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Generate mobile E2E portfolio report
+        run: node Appium_tests/run-portfolio-suite.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-e2e-reports
+          path: Appium_tests/reports
+          if-no-files-found: warn
+          retention-days: 30
+
+  security-tests:
+    name: Run Backend Security Checks
+    runs-on: ubuntu-latest
+    needs: verify-project
+    defaults:
+      run:
+        working-directory: vulnerability-testing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: vulnerability-testing/package-lock.json
+      - run: npm ci
+      - name: Run safe security validation
+        env:
+          DEMO: 'true'
+        run: npm run run
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-test-reports
+          path: vulnerability-testing/reports
+          if-no-files-found: warn
+          retention-days: 30
+
+  selenium-e2e-tests:
+    name: Run Selenium E2E Tests
+    runs-on: ubuntu-latest
+    needs: frontend-build
+    defaults:
+      run:
+        working-directory: selenium-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Run the web portfolio suite
+        run: mvn --batch-mode clean test -Dexecution.mode=report-only -Dheadless=true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selenium-e2e-reports
+          path: |
+            selenium-tests/target/vaultflow-reports
+            selenium-tests/target/surefire-reports
+          if-no-files-found: warn
+          retention-days: 30
+
+  api-load-tests:
+    name: Run API Load Tests
+    runs-on: ubuntu-latest
+    needs: backend-api-tests
+    defaults:
+      run:
+        working-directory: load-testing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate the 420-scenario load-test catalog
+        run: npm run catalog
+      - name: Run live k6 profile when manually requested
+        if: github.event_name == 'workflow_dispatch' && inputs.run_live_load_test
+        uses: grafana/setup-k6-action@v1
+      - name: Execute live k6 profile when manually requested
+        if: github.event_name == 'workflow_dispatch' && inputs.run_live_load_test
+        env:
+          BASE_URL: ${{ vars.VAULTFLOW_LOAD_TEST_URL }}
+          VAULTFLOW_TOKEN: ${{ secrets.VAULTFLOW_LOAD_TEST_TOKEN }}
+        run: |
+          test -n "$BASE_URL"
+          test -n "$VAULTFLOW_TOKEN"
+          npm run run
+      - name: Record load-test execution mode
+        run: |
+          mkdir -p reports
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.run_live_load_test }}" = "true" ]; then
+            echo "Live k6 profile executed." > reports/ci-status.txt
+          else
+            echo "Catalog validated. Live k6 profile not run on push/PR; use workflow_dispatch with run_live_load_test." > reports/ci-status.txt
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-load-test-reports
+          path: load-testing/reports
+          if-no-files-found: warn
+          retention-days: 30
+
+  consolidate-reports:
+    name: Consolidate & Verify Reports
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - verify-project
+      - backend-api-tests
+      - frontend-build
+      - mobile-e2e-report
+      - security-tests
+      - selenium-e2e-tests
+      - api-load-tests
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobile-e2e-reports
+          path: artifacts/mobile
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: selenium-e2e-reports
+          path: artifacts/web
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: security-test-reports
+          path: artifacts/security
+        continue-on-error: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-load-test-reports
+          path: artifacts/load
+        continue-on-error: true
+      - name: Publish unified dashboard to the Actions summary
+        run: |
+          {
+            echo "# 📊 VaultFlow Unified Test Verification Dashboard"
+            echo
+            echo "This is the complete run-level summary. Download the report artifacts above for the Excel, HTML, PDF, JSON, and execution-log files."
+            echo
+            echo "## Unified Summary Overview"
+            echo
+            echo "| Component | Job status | Test suite / report | Result |"
+            echo "| --- | --- | --- | --- |"
+            echo "| Project setup | ${{ needs.verify-project.result }} | Repository structure verification | Required files checked |"
+            echo "| Backend API | ${{ needs.backend-api-tests.result }} | Jest + MongoDB integration tests | Authentication API suite |"
+            echo "| Flutter web | ${{ needs.frontend-build.result }} | Analyze, widget test, and release web build | Build artifact uploaded |"
+            echo "| Mobile E2E | ${{ needs.mobile-e2e-report.result }} | Appium portfolio report | Generated report-only evidence |"
+            echo "| Web E2E | ${{ needs.selenium-e2e-tests.result }} | Selenium/TestNG portfolio suite | Generated web E2E reports |"
+            echo "| Security | ${{ needs.security-tests.result }} | Safe security validation | Portfolio/demo mode |"
+            echo "| API load | ${{ needs.api-load-tests.result }} | k6 catalog / optional live profile | See execution mode below |"
+            echo
+            echo "## 📱 Mobile E2E Test Details"
+            if [ -f artifacts/mobile/execution.log ]; then
+              echo '```text'
+              sed -n '1,80p' artifacts/mobile/execution.log
+              echo '```'
+            else
+              echo "Mobile artifact was not available."
+            fi
+            echo
+            echo "## 🌐 Website E2E Test Details"
+            if [ -f artifacts/web/vaultflow-reports/logs/execution-summary.log ]; then
+              echo '```text'
+              sed -n '1,80p' artifacts/web/vaultflow-reports/logs/execution-summary.log
+              echo '```'
+            else
+              echo "See the Selenium E2E artifact for the full Extent, Excel, PDF, and TestNG reports."
+            fi
+            echo
+            echo "## 🛡️ Backend Security Details"
+            if [ -f artifacts/security/security-results.json ]; then
+              echo '```json'
+              jq '.summary' artifacts/security/security-results.json
+              echo '```'
+            else
+              echo "Security artifact was not available."
+            fi
+            echo
+            echo "## ⚡ API Load Testing Details"
+            if [ -f artifacts/load/ci-status.txt ]; then
+              echo "$(<artifacts/load/ci-status.txt)"
+            fi
+            if [ -f artifacts/load/summary.csv ]; then
+              echo
+              echo '```csv'
+              sed -n '1,30p' artifacts/load/summary.csv
+              echo '```'
+            fi
+            echo
+            echo "## 📦 Report Artifacts"
+            echo
+            echo "- **mobile-e2e-reports** — HTML, Excel, PDF, Allure JSON, coverage, performance, and execution log"
+            echo "- **selenium-e2e-reports** — Extent HTML, Excel summary, PDF, screenshots, and TestNG results"
+            echo "- **security-test-reports** — HTML, Excel, CSV, JSON, PDF, and OWASP mapping"
+            echo "- **api-load-test-reports** — catalog/load output and execution status"
+            echo "- **vaultflow-web-build** — deployable Flutter web build"
+          } >> "$GITHUB_STEP_SUMMARY"
