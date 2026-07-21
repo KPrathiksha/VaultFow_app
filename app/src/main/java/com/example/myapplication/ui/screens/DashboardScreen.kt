@@ -81,8 +81,8 @@ fun DashboardScreen(
 
     var showSetupWizard by remember { mutableStateOf(false) }
     LaunchedEffect(bankAccounts, isProfileLoaded) {
-        if (isProfileLoaded && bankAccounts.isEmpty()) {
-            showSetupWizard = true
+        if (isProfileLoaded) {
+            showSetupWizard = bankAccounts.isEmpty()
         }
     }
 
@@ -133,6 +133,7 @@ fun DashboardScreen(
                         pin = pin
                     )
                 )
+                showSetupWizard = false
             },
             onNavigateToWallet = {
                 onNavigate("wallet")
