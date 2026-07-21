@@ -287,7 +287,7 @@ class VaultViewModel : ViewModel() {
         } else {
             try {
                 val testModel = GenerativeModel(
-                    modelName = "gemini-1.5-flash",
+                    modelName = "gemini-flash-latest",
                     apiKey = testKey
                 )
                 val response = testModel.generateContent(

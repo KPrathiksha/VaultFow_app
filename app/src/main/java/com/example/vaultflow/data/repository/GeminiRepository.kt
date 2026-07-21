@@ -13,7 +13,7 @@ import org.json.JSONObject
 class GeminiRepository(private val apiKey: String, private val baseUrl: String = "") {
     
     private val generativeModel = GenerativeModel(
-        modelName = "gemini-1.5-flash",
+        modelName = "gemini-flash-latest",
         apiKey = apiKey
     )
 
