@@ -8,6 +8,7 @@ import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.tasks.await
 
 class FirestoreRepository {
@@ -17,18 +18,20 @@ class FirestoreRepository {
 
     private fun getUserDoc() = userId?.let { firestore.collection("users").document(it) }
 
-    fun getUserProfile(): Flow<UserProfile?> = callbackFlow {
-        val userDoc = getUserDoc() ?: return@callbackFlow
-        val subscription = userDoc.addSnapshotListener { snapshot, error ->
-            if (error != null) {
-                android.util.Log.e("FirestoreRepository", "UserProfile listener error: ${error.message}")
-                trySend(null)
-                return@addSnapshotListener
+    fun getUserProfile(): Flow<UserProfile?> {
+        val userDoc = getUserDoc() ?: return flowOf(null)
+        return callbackFlow {
+            val subscription = userDoc.addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    android.util.Log.e("FirestoreRepository", "UserProfile listener error: ${error.message}")
+                    trySend(null)
+                    return@addSnapshotListener
+                }
+                val profile = snapshot?.toObject(UserProfile::class.java)
+                trySend(profile)
             }
-            val profile = snapshot?.toObject(UserProfile::class.java)
-            trySend(profile)
+            awaitClose { subscription.remove() }
         }
-        awaitClose { subscription.remove() }
     }
 
     suspend fun saveUserProfile(profile: UserProfile) {
@@ -40,20 +43,22 @@ class FirestoreRepository {
         }
     }
 
-    fun getTransactions(): Flow<List<Transaction>> = callbackFlow {
-        val userDoc = getUserDoc() ?: return@callbackFlow
-        val subscription = userDoc.collection("transactions")
-            .orderBy("date", Query.Direction.DESCENDING)
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    android.util.Log.e("FirestoreRepository", "Transactions listener error: ${error.message}")
-                    trySend(emptyList())
-                    return@addSnapshotListener
+    fun getTransactions(): Flow<List<Transaction>> {
+        val userDoc = getUserDoc() ?: return flowOf(emptyList())
+        return callbackFlow {
+            val subscription = userDoc.collection("transactions")
+                .orderBy("date", Query.Direction.DESCENDING)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        android.util.Log.e("FirestoreRepository", "Transactions listener error: ${error.message}")
+                        trySend(emptyList())
+                        return@addSnapshotListener
+                    }
+                    val transactions = snapshot?.toObjects(Transaction::class.java) ?: emptyList()
+                    trySend(transactions)
                 }
-                val transactions = snapshot?.toObjects(Transaction::class.java) ?: emptyList()
-                trySend(transactions)
-            }
-        awaitClose { subscription.remove() }
+            awaitClose { subscription.remove() }
+        }
     }
 
     suspend fun addTransaction(transaction: Transaction) {
@@ -92,19 +97,21 @@ class FirestoreRepository {
         }
     }
 
-    fun getSubscriptions(): Flow<List<Subscription>> = callbackFlow {
-        val userDoc = getUserDoc() ?: return@callbackFlow
-        val subscription = userDoc.collection("subscriptions")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    android.util.Log.e("FirestoreRepository", "Subscriptions listener error: ${error.message}")
-                    trySend(emptyList())
-                    return@addSnapshotListener
+    fun getSubscriptions(): Flow<List<Subscription>> {
+        val userDoc = getUserDoc() ?: return flowOf(emptyList())
+        return callbackFlow {
+            val subscription = userDoc.collection("subscriptions")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        android.util.Log.e("FirestoreRepository", "Subscriptions listener error: ${error.message}")
+                        trySend(emptyList())
+                        return@addSnapshotListener
+                    }
+                    val subs = snapshot?.toObjects(Subscription::class.java) ?: emptyList()
+                    trySend(subs)
                 }
-                val subs = snapshot?.toObjects(Subscription::class.java) ?: emptyList()
-                trySend(subs)
-            }
-        awaitClose { subscription.remove() }
+            awaitClose { subscription.remove() }
+        }
     }
 
     suspend fun addSubscription(sub: Subscription) {
@@ -116,19 +123,21 @@ class FirestoreRepository {
         }
     }
 
-    fun getSavingsGoals(): Flow<List<SavingsGoal>> = callbackFlow {
-        val userDoc = getUserDoc() ?: return@callbackFlow
-        val subscription = userDoc.collection("savings_goals")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    android.util.Log.e("FirestoreRepository", "SavingsGoals listener error: ${error.message}")
-                    trySend(emptyList())
-                    return@addSnapshotListener
+    fun getSavingsGoals(): Flow<List<SavingsGoal>> {
+        val userDoc = getUserDoc() ?: return flowOf(emptyList())
+        return callbackFlow {
+            val subscription = userDoc.collection("savings_goals")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        android.util.Log.e("FirestoreRepository", "SavingsGoals listener error: ${error.message}")
+                        trySend(emptyList())
+                        return@addSnapshotListener
+                    }
+                    val goals = snapshot?.toObjects(SavingsGoal::class.java) ?: emptyList()
+                    trySend(goals)
                 }
-                val goals = snapshot?.toObjects(SavingsGoal::class.java) ?: emptyList()
-                trySend(goals)
-            }
-        awaitClose { subscription.remove() }
+            awaitClose { subscription.remove() }
+        }
     }
 
     suspend fun addSavingsGoal(goal: SavingsGoal) {
@@ -150,19 +159,21 @@ class FirestoreRepository {
         }
     }
 
-    fun getBudgets(): Flow<List<Budget>> = callbackFlow {
-        val userDoc = getUserDoc() ?: return@callbackFlow
-        val subscription = userDoc.collection("budgets")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    android.util.Log.e("FirestoreRepository", "Budgets listener error: ${error.message}")
-                    trySend(emptyList())
-                    return@addSnapshotListener
+    fun getBudgets(): Flow<List<Budget>> {
+        val userDoc = getUserDoc() ?: return flowOf(emptyList())
+        return callbackFlow {
+            val subscription = userDoc.collection("budgets")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        android.util.Log.e("FirestoreRepository", "Budgets listener error: ${error.message}")
+                        trySend(emptyList())
+                        return@addSnapshotListener
+                    }
+                    val budgets = snapshot?.toObjects(Budget::class.java) ?: emptyList()
+                    trySend(budgets)
                 }
-                val budgets = snapshot?.toObjects(Budget::class.java) ?: emptyList()
-                trySend(budgets)
-            }
-        awaitClose { subscription.remove() }
+            awaitClose { subscription.remove() }
+        }
     }
 
     suspend fun setBudget(budget: Budget) {
@@ -185,26 +196,28 @@ class FirestoreRepository {
         }
     }
 
-    fun getBankAccounts(): Flow<List<BankAccount>> = callbackFlow {
-        val userDoc = getUserDoc() ?: return@callbackFlow
-        val subscription = userDoc.collection("bank_accounts")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    android.util.Log.e("FirestoreRepository", "BankAccounts listener error: ${error.message}")
-                    trySend(emptyList())
-                    return@addSnapshotListener
+    fun getBankAccounts(): Flow<List<BankAccount>> {
+        val userDoc = getUserDoc() ?: return flowOf(emptyList())
+        return callbackFlow {
+            val subscription = userDoc.collection("bank_accounts")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        android.util.Log.e("FirestoreRepository", "BankAccounts listener error: ${error.message}")
+                        trySend(emptyList())
+                        return@addSnapshotListener
+                    }
+                    val accounts = snapshot?.toObjects(BankAccount::class.java) ?: emptyList()
+                    val decryptedAccounts = accounts.map { acc ->
+                        acc.copy(
+                            accountNumber = com.example.vaultflow.util.CryptoHelper.decrypt(acc.accountNumber),
+                            accountHolder = com.example.vaultflow.util.CryptoHelper.decrypt(acc.accountHolder),
+                            pin = com.example.vaultflow.util.CryptoHelper.decrypt(acc.pin)
+                        )
+                    }
+                    trySend(decryptedAccounts)
                 }
-                val accounts = snapshot?.toObjects(BankAccount::class.java) ?: emptyList()
-                val decryptedAccounts = accounts.map { acc ->
-                    acc.copy(
-                        accountNumber = com.example.vaultflow.util.CryptoHelper.decrypt(acc.accountNumber),
-                        accountHolder = com.example.vaultflow.util.CryptoHelper.decrypt(acc.accountHolder),
-                        pin = com.example.vaultflow.util.CryptoHelper.decrypt(acc.pin)
-                    )
-                }
-                trySend(decryptedAccounts)
-            }
-        awaitClose { subscription.remove() }
+            awaitClose { subscription.remove() }
+        }
     }
 
     suspend fun addBankAccount(account: BankAccount) {
@@ -232,19 +245,21 @@ class FirestoreRepository {
         }
     }
 
-    fun getLinkedBanks(): Flow<List<LinkedBank>> = callbackFlow {
-        val userDoc = getUserDoc() ?: return@callbackFlow
-        val subscription = userDoc.collection("linked_banks")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    android.util.Log.e("FirestoreRepository", "LinkedBanks listener error: ${error.message}")
-                    trySend(emptyList())
-                    return@addSnapshotListener
+    fun getLinkedBanks(): Flow<List<LinkedBank>> {
+        val userDoc = getUserDoc() ?: return flowOf(emptyList())
+        return callbackFlow {
+            val subscription = userDoc.collection("linked_banks")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        android.util.Log.e("FirestoreRepository", "LinkedBanks listener error: ${error.message}")
+                        trySend(emptyList())
+                        return@addSnapshotListener
+                    }
+                    val banks = snapshot?.toObjects(LinkedBank::class.java) ?: emptyList()
+                    trySend(banks)
                 }
-                val banks = snapshot?.toObjects(LinkedBank::class.java) ?: emptyList()
-                trySend(banks)
-            }
-        awaitClose { subscription.remove() }
+            awaitClose { subscription.remove() }
+        }
     }
 
     suspend fun addLinkedBank(bank: LinkedBank) {
