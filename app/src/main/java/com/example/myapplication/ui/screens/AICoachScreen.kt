@@ -90,7 +90,6 @@ fun AICoachScreen(
             ) {
                 Row(
                     modifier = Modifier
-                        .navigationBarsPadding()
                         .imePadding()
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically

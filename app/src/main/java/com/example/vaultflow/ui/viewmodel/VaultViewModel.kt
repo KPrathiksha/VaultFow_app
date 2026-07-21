@@ -247,8 +247,52 @@ class VaultViewModel : ViewModel() {
         }
     }
 
-    fun updateAiApiKey(newKey: String, newBaseUrl: String = "") {
-        geminiRepository = GeminiRepository(newKey, newBaseUrl)
+    fun updateAiApiKey(newKey: String, newBaseUrl: String = "", newModelName: String = "gemini-flash-latest") {
+        geminiRepository = GeminiRepository(newKey, newBaseUrl, newModelName)
+        updateAiNudge(_transactions.value)
+    }
+
+    suspend fun fetchBestModel(key: String, baseUrl: String = ""): String = withContext(Dispatchers.IO) {
+        val client = okhttp3.OkHttpClient()
+        val url = if (baseUrl.isNotBlank()) {
+            if (baseUrl.endsWith("/")) "${baseUrl}v1beta/models?key=$key" else "$baseUrl/v1beta/models?key=$key"
+        } else {
+            "https://generativelanguage.googleapis.com/v1beta/models?key=$key"
+        }
+        
+        try {
+            val request = okhttp3.Request.Builder().url(url).build()
+            client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val body = response.body?.string() ?: ""
+                    val json = org.json.JSONObject(body)
+                    if (json.has("models")) {
+                        val modelsArray = json.getJSONArray("models")
+                        val modelNames = mutableListOf<String>()
+                        for (i in 0 until modelsArray.length()) {
+                            val modelObj = modelsArray.getJSONObject(i)
+                            val name = modelObj.getString("name")
+                            modelNames.add(name.substringAfter("models/"))
+                        }
+                        
+                        when {
+                            modelNames.contains("gemini-2.5-flash") -> "gemini-2.5-flash"
+                            modelNames.contains("gemini-2.0-flash") -> "gemini-2.0-flash"
+                            modelNames.contains("gemini-flash-latest") -> "gemini-flash-latest"
+                            modelNames.contains("gemini-1.5-flash") -> "gemini-1.5-flash"
+                            else -> modelNames.firstOrNull { it.contains("flash") || it.contains("pro") } ?: "gemini-flash-latest"
+                        }
+                    } else {
+                        "gemini-flash-latest"
+                    }
+                } else {
+                    "gemini-flash-latest"
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("VaultViewModel", "Failed to fetch best model: ${e.message}")
+            "gemini-flash-latest"
+        }
     }
 
     suspend fun validateGeminiKey(testKey: String, testBaseUrl: String = ""): Boolean = withContext(Dispatchers.IO) {
