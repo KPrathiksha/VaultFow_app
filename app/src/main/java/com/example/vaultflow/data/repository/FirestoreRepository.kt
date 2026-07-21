@@ -32,8 +32,12 @@ class FirestoreRepository {
     }
 
     suspend fun saveUserProfile(profile: UserProfile) {
-        val userDoc = getUserDoc() ?: return
-        userDoc.set(profile, SetOptions.merge()).await()
+        try {
+            val userDoc = getUserDoc() ?: return
+            userDoc.set(profile, SetOptions.merge()).await()
+        } catch (e: Exception) {
+            android.util.Log.e("FirestoreRepository", "saveUserProfile failed: ${e.message}")
+        }
     }
 
     fun getTransactions(): Flow<List<Transaction>> = callbackFlow {
@@ -53,35 +57,39 @@ class FirestoreRepository {
     }
 
     suspend fun addTransaction(transaction: Transaction) {
-        val userDoc = getUserDoc() ?: return
-        firestore.runTransaction { fireTransaction ->
-            val userSnapshot = try {
-                fireTransaction.get(userDoc)
-            } catch (e: Exception) {
-                null
-            }
-            
-            val currentBalance = if (userSnapshot?.exists() == true) {
-                userSnapshot.getDouble("totalBalance") ?: 0.0
-            } else {
-                0.0
-            }
-            
-            val newBalance = if (transaction.type == TransactionType.INCOME) {
-                currentBalance + transaction.amount
-            } else {
-                currentBalance - transaction.amount
-            }
-            
-            if (userSnapshot?.exists() == true) {
-                fireTransaction.update(userDoc, "totalBalance", newBalance)
-            } else {
-                fireTransaction.set(userDoc, mapOf("totalBalance" to newBalance), SetOptions.merge())
-            }
-            
-            val transactionRef = userDoc.collection("transactions").document()
-            fireTransaction.set(transactionRef, transaction.copy(id = transactionRef.id))
-        }.await()
+        try {
+            val userDoc = getUserDoc() ?: return
+            firestore.runTransaction { fireTransaction ->
+                val userSnapshot = try {
+                    fireTransaction.get(userDoc)
+                } catch (e: Exception) {
+                    null
+                }
+                
+                val currentBalance = if (userSnapshot?.exists() == true) {
+                    userSnapshot.getDouble("totalBalance") ?: 0.0
+                } else {
+                    0.0
+                }
+                
+                val newBalance = if (transaction.type == TransactionType.INCOME) {
+                    currentBalance + transaction.amount
+                } else {
+                    currentBalance - transaction.amount
+                }
+                
+                if (userSnapshot?.exists() == true) {
+                    fireTransaction.update(userDoc, "totalBalance", newBalance)
+                } else {
+                    fireTransaction.set(userDoc, mapOf("totalBalance" to newBalance), SetOptions.merge())
+                }
+                
+                val transactionRef = userDoc.collection("transactions").document()
+                fireTransaction.set(transactionRef, transaction.copy(id = transactionRef.id))
+            }.await()
+        } catch (e: Exception) {
+            android.util.Log.e("FirestoreRepository", "addTransaction failed: ${e.message}")
+        }
     }
 
     fun getSubscriptions(): Flow<List<Subscription>> = callbackFlow {
@@ -100,8 +108,12 @@ class FirestoreRepository {
     }
 
     suspend fun addSubscription(sub: Subscription) {
-        val userDoc = getUserDoc() ?: return
-        userDoc.collection("subscriptions").add(sub).await()
+        try {
+            val userDoc = getUserDoc() ?: return
+            userDoc.collection("subscriptions").add(sub).await()
+        } catch (e: Exception) {
+            android.util.Log.e("FirestoreRepository", "addSubscription failed: ${e.message}")
+        }
     }
 
     fun getSavingsGoals(): Flow<List<SavingsGoal>> = callbackFlow {
@@ -120,14 +132,22 @@ class FirestoreRepository {
     }
 
     suspend fun addSavingsGoal(goal: SavingsGoal) {
-        val userDoc = getUserDoc() ?: return
-        val goalRef = userDoc.collection("savings_goals").document()
-        goalRef.set(goal.copy(id = goalRef.id)).await()
+        try {
+            val userDoc = getUserDoc() ?: return
+            val goalRef = userDoc.collection("savings_goals").document()
+            goalRef.set(goal.copy(id = goalRef.id)).await()
+        } catch (e: Exception) {
+            android.util.Log.e("FirestoreRepository", "addSavingsGoal failed: ${e.message}")
+        }
     }
 
     suspend fun updateSavingsGoalProgress(goalId: String, newCurrentAmount: Double) {
-        val userDoc = getUserDoc() ?: return
-        userDoc.collection("savings_goals").document(goalId).update("currentAmount", newCurrentAmount).await()
+        try {
+            val userDoc = getUserDoc() ?: return
+            userDoc.collection("savings_goals").document(goalId).update("currentAmount", newCurrentAmount).await()
+        } catch (e: Exception) {
+            android.util.Log.e("FirestoreRepository", "updateSavingsGoalProgress failed: ${e.message}")
+        }
     }
 
     fun getBudgets(): Flow<List<Budget>> = callbackFlow {
@@ -146,14 +166,23 @@ class FirestoreRepository {
     }
 
     suspend fun setBudget(budget: Budget) {
-        val userDoc = getUserDoc() ?: return
-        userDoc.collection("budgets").document(budget.category).set(budget).await()
+        try {
+            val userDoc = getUserDoc() ?: return
+            userDoc.collection("budgets").document(budget.category).set(budget).await()
+        } catch (e: Exception) {
+            android.util.Log.e("FirestoreRepository", "setBudget failed: ${e.message}")
+        }
     }
     
     suspend fun getUserBalance(): Double {
-        val userDoc = getUserDoc() ?: return 0.0
-        val snapshot = userDoc.get().await()
-        return snapshot.getDouble("totalBalance") ?: 0.0
+        return try {
+            val userDoc = getUserDoc() ?: return 0.0
+            val snapshot = userDoc.get().await()
+            snapshot.getDouble("totalBalance") ?: 0.0
+        } catch (e: Exception) {
+            android.util.Log.e("FirestoreRepository", "getUserBalance failed: ${e.message}")
+            0.0
+        }
     }
 
     fun getBankAccounts(): Flow<List<BankAccount>> = callbackFlow {
@@ -179,20 +208,28 @@ class FirestoreRepository {
     }
 
     suspend fun addBankAccount(account: BankAccount) {
-        val userDoc = getUserDoc() ?: return
-        val accRef = userDoc.collection("bank_accounts").document()
-        val encryptedAccount = account.copy(
-            id = accRef.id,
-            accountNumber = com.example.vaultflow.util.CryptoHelper.encrypt(account.accountNumber),
-            accountHolder = com.example.vaultflow.util.CryptoHelper.encrypt(account.accountHolder),
-            pin = com.example.vaultflow.util.CryptoHelper.encrypt(account.pin)
-        )
-        accRef.set(encryptedAccount).await()
+        try {
+            val userDoc = getUserDoc() ?: return
+            val accRef = userDoc.collection("bank_accounts").document()
+            val encryptedAccount = account.copy(
+                id = accRef.id,
+                accountNumber = com.example.vaultflow.util.CryptoHelper.encrypt(account.accountNumber),
+                accountHolder = com.example.vaultflow.util.CryptoHelper.encrypt(account.accountHolder),
+                pin = com.example.vaultflow.util.CryptoHelper.encrypt(account.pin)
+            )
+            accRef.set(encryptedAccount).await()
+        } catch (e: Exception) {
+            android.util.Log.e("FirestoreRepository", "addBankAccount failed: ${e.message}")
+        }
     }
 
     suspend fun updateBankAccountBalance(accountId: String, newBalance: Double) {
-        val userDoc = getUserDoc() ?: return
-        userDoc.collection("bank_accounts").document(accountId).update("balance", newBalance).await()
+        try {
+            val userDoc = getUserDoc() ?: return
+            userDoc.collection("bank_accounts").document(accountId).update("balance", newBalance).await()
+        } catch (e: Exception) {
+            android.util.Log.e("FirestoreRepository", "updateBankAccountBalance failed: ${e.message}")
+        }
     }
 
     fun getLinkedBanks(): Flow<List<LinkedBank>> = callbackFlow {
@@ -211,8 +248,12 @@ class FirestoreRepository {
     }
 
     suspend fun addLinkedBank(bank: LinkedBank) {
-        val userDoc = getUserDoc() ?: return
-        val bankRef = userDoc.collection("linked_banks").document()
-        bankRef.set(bank.copy(id = bankRef.id)).await()
+        try {
+            val userDoc = getUserDoc() ?: return
+            val bankRef = userDoc.collection("linked_banks").document()
+            bankRef.set(bank.copy(id = bankRef.id)).await()
+        } catch (e: Exception) {
+            android.util.Log.e("FirestoreRepository", "addLinkedBank failed: ${e.message}")
+        }
     }
 }
