@@ -78,6 +78,7 @@ fun DashboardScreen(
     var currentTransferAmount by remember { mutableStateOf(0.0) }
 
     var selectedTransactionForReceipt by remember { mutableStateOf<Transaction?>(null) }
+    var isBalanceVisible by remember { mutableStateOf(false) }
 
     var showSetupWizard by remember { mutableStateOf(false) }
     LaunchedEffect(bankAccounts, isProfileLoaded) {
@@ -313,9 +314,18 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(20.dp))
                 DashboardHeader(displayName)
                 Spacer(modifier = Modifier.height(24.dp))
-                NetWorthCard(totalBalance, savingsGoals)
+                NetWorthCard(
+                    balance = totalBalance,
+                    goals = savingsGoals,
+                    isVisible = isBalanceVisible,
+                    onToggle = { isBalanceVisible = !isBalanceVisible }
+                )
                 Spacer(modifier = Modifier.height(24.dp))
-                BalanceCard(totalBalance)
+                BalanceCard(
+                    balance = totalBalance,
+                    isVisible = isBalanceVisible,
+                    onToggle = { isBalanceVisible = !isBalanceVisible }
+                )
                 Spacer(modifier = Modifier.height(24.dp))
                 QuickActions(
                     onSend = { showSendDialog = true },
@@ -331,8 +341,6 @@ fun DashboardScreen(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 FinancialHealthCard()
-                Spacer(modifier = Modifier.height(24.dp))
-                AIInsightCard(aiNudge)
                 Spacer(modifier = Modifier.height(24.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -405,7 +413,7 @@ fun DashboardHeader(userName: String) {
 }
 
 @Composable
-fun BalanceCard(balance: Double) {
+fun BalanceCard(balance: Double, isVisible: Boolean, onToggle: () -> Unit) {
     val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -429,10 +437,16 @@ fun BalanceCard(balance: Double) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(text = "Total Balance", color = Color.White.copy(alpha = 0.8f))
-                    Icon(Icons.Default.Visibility, contentDescription = "Show", tint = Color.White)
+                    IconButton(onClick = onToggle) {
+                        Icon(
+                            imageVector = if (isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = "Toggle Balance",
+                            tint = Color.White.copy(alpha = 0.8f)
+                        )
+                    }
                 }
                 Text(
-                    text = currencyFormatter.format(balance),
+                    text = if (isVisible) currencyFormatter.format(balance) else "••••••••",
                     color = Color.White,
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
@@ -712,11 +726,10 @@ fun SmartScanDialog(viewModel: VaultViewModel, onDismiss: () -> Unit) {
 }
 
 @Composable
-fun NetWorthCard(balance: Double, goals: List<com.example.vaultflow.data.model.SavingsGoal>) {
+fun NetWorthCard(balance: Double, goals: List<com.example.vaultflow.data.model.SavingsGoal>, isVisible: Boolean, onToggle: () -> Unit) {
     val totalSavings = goals.sumOf { it.currentAmount }
     val netWorth = balance + totalSavings
     val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "IN"))
-    var isVisible by remember { mutableStateOf(true) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -730,7 +743,7 @@ fun NetWorthCard(balance: Double, goals: List<com.example.vaultflow.data.model.S
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Estimated Net Worth", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
-                IconButton(onClick = { isVisible = !isVisible }) {
+                IconButton(onClick = onToggle) {
                     Icon(
                         imageVector = if (isVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                         contentDescription = "Toggle Balance",

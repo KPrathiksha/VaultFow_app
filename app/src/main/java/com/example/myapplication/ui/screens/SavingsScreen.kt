@@ -54,6 +54,16 @@ fun SavingsScreen(
                         currentAmount = current
                     )
                 )
+                if (current > 0.0) {
+                    viewModel.addTransaction(
+                        com.example.vaultflow.data.model.Transaction(
+                            title = "Initial Saved: $title",
+                            amount = current,
+                            category = "Savings",
+                            type = com.example.vaultflow.data.model.TransactionType.EXPENSE
+                        )
+                    )
+                }
                 showAddGoalDialog = false
             }
         )

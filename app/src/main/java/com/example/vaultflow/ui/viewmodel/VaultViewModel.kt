@@ -49,6 +49,9 @@ class VaultViewModel : ViewModel() {
     private val _aiNudge = MutableStateFlow("Loading smart insights...")
     val aiNudge: StateFlow<String> = _aiNudge
 
+    private val _pendingAiAction = MutableStateFlow<PendingAiAction?>(null)
+    val pendingAiAction: StateFlow<PendingAiAction?> = _pendingAiAction
+
     private val _chatMessages = MutableStateFlow<List<com.example.vaultflow.ui.screens.ChatMessage>>(
         listOf(com.example.vaultflow.ui.screens.ChatMessage("Hello! I'm your VaultFlow AI Coach. How can I help you manage your finances today?", false))
     )
@@ -154,12 +157,95 @@ class VaultViewModel : ViewModel() {
         }
     }
 
+    fun clearPendingAiAction() {
+        _pendingAiAction.value = null
+    }
+
+    fun confirmPendingAiAction() {
+        val action = _pendingAiAction.value ?: return
+        viewModelScope.launch {
+            when (action) {
+                is PendingAiAction.CreateSavingsGoal -> {
+                    repository.addSavingsGoal(
+                        com.example.vaultflow.data.model.SavingsGoal(
+                            title = action.title,
+                            targetAmount = action.amount,
+                            currentAmount = 0.0
+                        )
+                    )
+                    _chatMessages.value = _chatMessages.value + com.example.vaultflow.ui.screens.ChatMessage(
+                        "Action Authorized! I have successfully created your '${action.title}' savings goal with a target of ₹${action.amount}! 🚀",
+                        false
+                    )
+                }
+                is PendingAiAction.CreateTransaction -> {
+                    repository.addTransaction(
+                        com.example.vaultflow.data.model.Transaction(
+                            title = action.title,
+                            amount = action.amount,
+                            category = action.category,
+                            type = action.type
+                        )
+                    )
+                    _chatMessages.value = _chatMessages.value + com.example.vaultflow.ui.screens.ChatMessage(
+                        "Action Authorized! I have successfully added your '${action.title}' transaction of ₹${action.amount} under '${action.category}'! 💸",
+                        false
+                    )
+                }
+            }
+            _pendingAiAction.value = null
+        }
+    }
+
     fun sendMessage(text: String) {
         val userMsg = com.example.vaultflow.ui.screens.ChatMessage(text, true)
         _chatMessages.value = _chatMessages.value + userMsg
         
         viewModelScope.launch {
             _isTyping.value = true
+            
+            // Dynamic AI Write-Intent Parser!
+            val lowerText = text.lowercase()
+            if (lowerText.contains("saving") && (lowerText.contains("make") || lowerText.contains("create") || lowerText.contains("add"))) {
+                val amountRegex = "\\d+".toRegex()
+                val amount = amountRegex.find(lowerText)?.value?.toDoubleOrNull() ?: 250.0
+                
+                var title = "Medicine"
+                if (lowerText.contains("medicine")) title = "Medicine"
+                else if (lowerText.contains("travel")) title = "Travel"
+                else if (lowerText.contains("education")) title = "Education"
+                else if (lowerText.contains("bike")) title = "Bike"
+                
+                // Draft Action for User Confirmation Overlay!
+                _pendingAiAction.value = PendingAiAction.CreateSavingsGoal(title, amount)
+                
+                val aiResponse = "I have prepared an AI Copilot action to create a savings goal for '$title' with a target of ₹$amount. Please click 'Confirm' on your screen to authorize and write it to your database! 🛡️"
+                _chatMessages.value = _chatMessages.value + com.example.vaultflow.ui.screens.ChatMessage(aiResponse, false)
+                _isTyping.value = false
+                return@launch
+            } else if (lowerText.contains("transaction") || lowerText.contains("spending") || lowerText.contains("add expense") || lowerText.contains("add income")) {
+                val amountRegex = "\\d+".toRegex()
+                val amount = amountRegex.find(lowerText)?.value?.toDoubleOrNull() ?: 100.0
+                
+                val isIncome = lowerText.contains("income") || lowerText.contains("salary") || lowerText.contains("deposit")
+                val type = if (isIncome) TransactionType.INCOME else TransactionType.EXPENSE
+                val category = if (isIncome) "Income" else "Entertainment"
+                
+                var title = "Coffee"
+                if (lowerText.contains("coffee")) title = "Coffee"
+                else if (lowerText.contains("food")) title = "Food"
+                else if (lowerText.contains("rent")) title = "Rent"
+                else if (lowerText.contains("salary")) title = "Salary"
+                
+                // Draft Action for User Confirmation Overlay!
+                _pendingAiAction.value = PendingAiAction.CreateTransaction(title, amount, type, category)
+                
+                val aiResponse = "I have prepared an AI Copilot action to add a ${type.name.lowercase()} transaction for '$title' of ₹$amount. Please click 'Confirm' on your screen to authorize and write it to your database! 🛡️"
+                _chatMessages.value = _chatMessages.value + com.example.vaultflow.ui.screens.ChatMessage(aiResponse, false)
+                _isTyping.value = false
+                return@launch
+            }
+
             try {
                 // Read the actual local history.json file for real-time AI context!
                 val file = java.io.File("/data/data/com.example.vaultflow/files/history.json")
@@ -346,4 +432,9 @@ class VaultViewModel : ViewModel() {
             }
         }
     }
+}
+
+sealed class PendingAiAction {
+    data class CreateSavingsGoal(val title: String, val amount: Double) : PendingAiAction()
+    data class CreateTransaction(val title: String, val amount: Double, val type: com.example.vaultflow.data.model.TransactionType, val category: String) : PendingAiAction()
 }

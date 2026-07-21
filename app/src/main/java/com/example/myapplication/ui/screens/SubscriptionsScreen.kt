@@ -47,6 +47,14 @@ fun SubscriptionsScreen(
                         category = category
                     )
                 )
+                viewModel.addTransaction(
+                    com.example.vaultflow.data.model.Transaction(
+                        title = "Subscription: $name",
+                        amount = amount,
+                        category = category,
+                        type = com.example.vaultflow.data.model.TransactionType.EXPENSE
+                    )
+                )
                 showAddDialog = false
             }
         )

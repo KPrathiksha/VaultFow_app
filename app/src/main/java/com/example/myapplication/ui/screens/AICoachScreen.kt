@@ -30,8 +30,64 @@ fun AICoachScreen(
     var userMessage by remember { mutableStateOf("") }
     val chatMessages by viewModel.chatMessages.collectAsState()
     val isTyping by viewModel.isTyping.collectAsState()
+    val pendingAction by viewModel.pendingAiAction.collectAsState()
     
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    if (pendingAction != null) {
+        val action = pendingAction!!
+        AlertDialog(
+            onDismissRequest = { viewModel.clearPendingAiAction() },
+            title = { Text("AI Copilot Authorization", fontWeight = FontWeight.Bold, color = VaultTextDark) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Your AI Coach has drafted a database creation request for you. Please authorize to write it securely to your database:",
+                        fontSize = 13.sp,
+                        color = VaultTextLight
+                    )
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = VaultSurface)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            when (action) {
+                                is com.example.vaultflow.ui.viewmodel.PendingAiAction.CreateSavingsGoal -> {
+                                    Text("🎯 Action: Create Savings Goal", fontWeight = FontWeight.Bold, color = VaultPrimary, fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text("Goal Title: ${action.title}", fontSize = 13.sp, color = VaultTextDark)
+                                    Text("Target Amount: ₹${action.amount}", fontSize = 13.sp, color = VaultTextDark)
+                                }
+                                is com.example.vaultflow.ui.viewmodel.PendingAiAction.CreateTransaction -> {
+                                    Text("💸 Action: Add Transaction", fontWeight = FontWeight.Bold, color = VaultPrimary, fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text("Title: ${action.title}", fontSize = 13.sp, color = VaultTextDark)
+                                    Text("Amount: ₹${action.amount}", fontSize = 13.sp, color = VaultTextDark)
+                                    Text("Type: ${action.type.name}", fontSize = 13.sp, color = VaultTextDark)
+                                    Text("Category: ${action.category}", fontSize = 13.sp, color = VaultTextDark)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.confirmPendingAiAction() },
+                    colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Authorize & Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.clearPendingAiAction() }) {
+                    Text("Cancel", color = VaultTextLight)
+                }
+            }
+        )
+    }
 
     // Auto-scroll to bottom when new messages arrive
     LaunchedEffect(chatMessages.size) {
