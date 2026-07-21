@@ -10,10 +10,14 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import org.json.JSONObject
 
-class GeminiRepository(private val apiKey: String, private val baseUrl: String = "") {
+class GeminiRepository(
+    private val apiKey: String, 
+    private val baseUrl: String = "", 
+    private val modelName: String = "gemini-flash-latest"
+) {
     
     private val generativeModel = GenerativeModel(
-        modelName = "gemini-flash-latest",
+        modelName = modelName,
         apiKey = apiKey
     )
 
@@ -39,7 +43,7 @@ class GeminiRepository(private val apiKey: String, private val baseUrl: String =
             callGeminiViaOkHttp(styledPrompt)
         } else {
             try {
-                android.util.Log.d("Gemini", "Sending prompt to Gemini SDK: $styledPrompt")
+                android.util.Log.d("Gemini", "Sending prompt to Gemini SDK ($modelName): $styledPrompt")
                 val response = generativeModel.generateContent(
                     content { text(styledPrompt) }
                 )
@@ -68,9 +72,9 @@ class GeminiRepository(private val apiKey: String, private val baseUrl: String =
             """.trimIndent()
             
             val url = if (baseUrl.endsWith("/")) {
-                "${baseUrl}v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey"
+                "${baseUrl}v1beta/models/$modelName:generateContent?key=$apiKey"
             } else {
-                "$baseUrl/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey"
+                "$baseUrl/v1beta/models/$modelName:generateContent?key=$apiKey"
             }
             
             val request = Request.Builder()

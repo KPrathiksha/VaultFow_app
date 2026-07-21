@@ -75,8 +75,9 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(Unit) {
                             val savedApiKey = prefs.getString("gemini_api_key", "") ?: ""
                             val savedBaseUrl = prefs.getString("gemini_base_url", "") ?: ""
+                            val savedModelName = prefs.getString("gemini_model_name", "gemini-flash-latest") ?: "gemini-flash-latest"
                             if (savedApiKey.isNotBlank()) {
-                                vaultViewModel.updateAiApiKey(savedApiKey, savedBaseUrl)
+                                vaultViewModel.updateAiApiKey(savedApiKey, savedBaseUrl, savedModelName)
                             }
                         }
 

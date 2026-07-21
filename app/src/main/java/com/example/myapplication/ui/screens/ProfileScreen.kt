@@ -75,12 +75,13 @@ fun ProfileScreen(
     if (showApiDialog) {
         ConfigureApiDialog(
             onDismiss = { showApiDialog = false },
-            onConfirm = { customKey, customBaseUrl ->
+            onConfirm = { customKey, customBaseUrl, bestModel ->
                 prefs.edit()
                     .putString("gemini_api_key", customKey)
                     .putString("gemini_base_url", customBaseUrl)
+                    .putString("gemini_model_name", bestModel)
                     .apply()
-                viewModel.updateAiApiKey(customKey, customBaseUrl)
+                viewModel.updateAiApiKey(customKey, customBaseUrl, bestModel)
                 showApiDialog = false
             }
         )
@@ -354,7 +355,7 @@ fun EditProfileDialog(
 @Composable
 fun ConfigureApiDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit
+    onConfirm: (String, String, String) -> Unit
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("vaultflow_prefs", android.content.Context.MODE_PRIVATE) }
@@ -445,13 +446,15 @@ fun ConfigureApiDialog(
 
                         // Execute on-device validation with custom credentials
                         val isValid = viewModel.validateGeminiKey(testKey, testBaseUrl)
-                        isValidating = false
                         
                         if (isValid) {
+                            val bestModel = viewModel.fetchBestModel(testKey, testBaseUrl)
+                            isValidating = false
                             isSuccess = true
-                            feedbackState = "Added successfully!"
-                            onConfirm(testKey, testBaseUrl)
+                            feedbackState = "Added successfully! Active Model: $bestModel"
+                            onConfirm(testKey, testBaseUrl, bestModel)
                         } else {
+                            isValidating = false
                             isSuccess = false
                             feedbackState = "Invalid API setup. Please verify credentials!"
                         }
