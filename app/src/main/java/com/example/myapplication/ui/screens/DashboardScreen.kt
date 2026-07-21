@@ -80,8 +80,8 @@ fun DashboardScreen(
     var selectedTransactionForReceipt by remember { mutableStateOf<Transaction?>(null) }
 
     var showSetupWizard by remember { mutableStateOf(false) }
-    LaunchedEffect(userProfile, isProfileLoaded) {
-        if (isProfileLoaded && (userProfile == null || userProfile?.displayName?.isBlank() == true)) {
+    LaunchedEffect(bankAccounts, isProfileLoaded) {
+        if (isProfileLoaded && bankAccounts.isEmpty()) {
             showSetupWizard = true
         }
     }
