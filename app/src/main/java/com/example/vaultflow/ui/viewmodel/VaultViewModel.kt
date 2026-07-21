@@ -57,6 +57,19 @@ class VaultViewModel : ViewModel() {
     private val _isTyping = MutableStateFlow(false)
     val isTyping: StateFlow<Boolean> = _isTyping
 
+    fun clearData() {
+        _transactions.value = emptyList()
+        _savingsGoals.value = emptyList()
+        _budgets.value = emptyList()
+        _bankAccounts.value = emptyList()
+        _userProfile.value = null
+        _isProfileLoaded.value = false
+        _totalBalance.value = 0.0
+        _aiNudge.value = "Welcome to VaultFlow! Add your first transaction to get smart AI nudges."
+        _chatMessages.value = listOf(com.example.vaultflow.ui.screens.ChatMessage("Hello! I'm your VaultFlow AI Coach. How can I help you manage your finances today?", false))
+        loadData()
+    }
+
     init {
         loadData()
     }

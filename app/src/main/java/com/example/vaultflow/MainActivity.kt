@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
                                     ProfileScreen(
                                         onLogout = {
                                             authClient.signOut()
+                                            vaultViewModel.clearData()
                                             isLoggedIn = false
                                         },
                                         onNavigate = { route -> navController.navigate(route) }
