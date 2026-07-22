@@ -11,6 +11,9 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
@@ -79,6 +82,10 @@ fun DashboardScreen(
 
     var selectedTransactionForReceipt by remember { mutableStateOf<Transaction?>(null) }
     var isBalanceVisible by remember { mutableStateOf(false) }
+    
+    var showQrPayDialog by remember { mutableStateOf(false) }
+    var scannedUpiId by remember { mutableStateOf("") }
+    var scannedPayeeName by remember { mutableStateOf("") }
 
     var showSetupWizard by remember { mutableStateOf(false) }
     LaunchedEffect(bankAccounts, isProfileLoaded) {
@@ -263,15 +270,41 @@ fun DashboardScreen(
         QRScannerDialog(
             onDismiss = { showScanDialog = false },
             onResult = { result ->
+                try {
+                    if (result.startsWith("upi://pay", true)) {
+                        val uri = android.net.Uri.parse(result)
+                        scannedUpiId = uri.getQueryParameter("pa") ?: "merchant@upi"
+                        scannedPayeeName = uri.getQueryParameter("pn") ?: "Scanned Payee"
+                    } else {
+                        scannedUpiId = result.take(24)
+                        scannedPayeeName = "Scanned Merchant"
+                    }
+                } catch (e: Exception) {
+                    scannedUpiId = "merchant@upi"
+                    scannedPayeeName = "Scanned Merchant"
+                }
+                showScanDialog = false
+                showQrPayDialog = true
+            }
+        )
+    }
+
+    if (showQrPayDialog) {
+        QrPayDialog(
+            upiId = scannedUpiId,
+            payeeName = scannedPayeeName,
+            bankAccounts = bankAccounts,
+            onDismiss = { showQrPayDialog = false },
+            onConfirm = { amountVal ->
                 viewModel.addTransaction(
                     Transaction(
-                        title = "QR Payment",
-                        amount = 100.0,
-                        category = "QR Scan",
+                        title = "UPI QR: Paid to $scannedPayeeName",
+                        amount = amountVal,
+                        category = "UPI QR Pay",
                         type = TransactionType.EXPENSE
                     )
                 )
-                showScanDialog = false
+                showQrPayDialog = false
             }
         )
     }
@@ -924,71 +957,214 @@ fun QRScannerDialog(onDismiss: () -> Unit, onResult: (String) -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
     
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Scan QR Code", fontWeight = FontWeight.Bold) },
-        text = {
-            Box(modifier = Modifier.fillMaxWidth().height(300.dp)) {
-                AndroidView(
-                    factory = { ctx ->
-                        val previewView = PreviewView(ctx).apply {
-                            scaleType = PreviewView.ScaleType.FILL_CENTER
-                        }
-                        val executor = ContextCompat.getMainExecutor(ctx)
-                        cameraProviderFuture.addListener({
-                            val cameraProvider = cameraProviderFuture.get()
-                            val preview = CameraPreview.Builder().build().also {
-                                it.setSurfaceProvider(previewView.surfaceProvider)
-                            }
+    var camera by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
+    var isTorchOn by remember { mutableStateOf(false) }
 
-                            val scanner = BarcodeScanning.getClient()
-                            val imageAnalysis = ImageAnalysis.Builder()
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                .build()
-                                .also {
-                                    it.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
-                                        val mediaImage = imageProxy.image
-                                        if (mediaImage != null) {
-                                            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-                                            scanner.process(image)
-                                                .addOnSuccessListener { barcodes ->
-                                                    if (barcodes.isNotEmpty()) {
-                                                        barcodes[0].rawValue?.let { value ->
-                                                            onResult(value)
-                                                        }
+    // Launcher to import and scan a local QR image from gallery
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val inputImage = com.google.mlkit.vision.common.InputImage.fromFilePath(context, uri)
+                val scanner = BarcodeScanning.getClient()
+                scanner.process(inputImage)
+                    .addOnSuccessListener { barcodes ->
+                        if (barcodes.isNotEmpty()) {
+                            barcodes[0].rawValue?.let { value ->
+                                onResult(value)
+                            }
+                        } else {
+                            android.widget.Toast.makeText(context, "No valid QR code found in selected image!", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    .addOnFailureListener { e ->
+                        android.widget.Toast.makeText(context, "Failed to parse image: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                    }
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "Error loading image: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    // Full-Screen Dialog mimicking GPay scanner interface
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            // 1. Camera Live Feed
+            AndroidView(
+                factory = { ctx ->
+                    val previewView = PreviewView(ctx).apply {
+                        scaleType = PreviewView.ScaleType.FILL_CENTER
+                    }
+                    val executor = ContextCompat.getMainExecutor(ctx)
+                    cameraProviderFuture.addListener({
+                        val cameraProvider = cameraProviderFuture.get()
+                        val preview = CameraPreview.Builder().build().also {
+                            it.setSurfaceProvider(previewView.surfaceProvider)
+                        }
+
+                        val scanner = BarcodeScanning.getClient()
+                        val imageAnalysis = ImageAnalysis.Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
+                            .also {
+                                it.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
+                                    val mediaImage = imageProxy.image
+                                    if (mediaImage != null) {
+                                        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                                        scanner.process(image)
+                                            .addOnSuccessListener { barcodes ->
+                                                if (barcodes.isNotEmpty()) {
+                                                    barcodes[0].rawValue?.let { value ->
+                                                        onResult(value)
                                                     }
                                                 }
-                                                .addOnCompleteListener {
-                                                    imageProxy.close()
-                                                }
-                                        }
+                                            }
+                                            .addOnCompleteListener {
+                                                imageProxy.close()
+                                            }
                                     }
                                 }
+                            }
 
-                            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
-                            try {
-                                cameraProvider.unbindAll()
-                                cameraProvider.bindToLifecycle(
+                        try {
+                            cameraProvider.unbindAll()
+                            camera = cameraProvider.bindToLifecycle(
                                     lifecycleOwner,
                                     cameraSelector,
                                     preview,
                                     imageAnalysis
                                 )
-                            } catch (e: Exception) {
-                                android.util.Log.e("Scanner", "Binding failed", e)
-                            }
-                        }, executor)
-                        previewView
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                        } catch (e: Exception) {
+                            android.util.Log.e("Scanner", "Binding failed", e)
+                        }
+                    }, executor)
+                    previewView
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            // 2. Translucent GPay-Style HUD Overlay
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Top Bar with Close (X) button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = Color.White
+                        )
+                    }
+                    
+                    Text(
+                        text = "Scan & Pay",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        modifier = Modifier.padding(end = 40.dp) // Offset close button for center balance
+                    )
+                    
+                    Spacer(modifier = Modifier.size(24.dp))
+                }
+
+                // Viewfinder Space (Center bracket box!)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Transparent Viewfinder square box frame
+                    Box(
+                        modifier = Modifier
+                            .size(240.dp)
+                            .border(width = 3.dp, color = VaultSecondary, shape = RoundedCornerShape(24.dp))
+                            .background(Color.Transparent)
+                    )
+                    
+                    Text(
+                        text = "Align UPI QR code inside the frame",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 32.dp)
+                            .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+
+                // Bottom Control Panel
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(bottom = 40.dp, start = 40.dp, end = 40.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Flashlight/Torch toggle button
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = {
+                                isTorchOn = !isTorchOn
+                                camera?.cameraControl?.enableTorch(isTorchOn)
+                            },
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(Color.White.copy(alpha = 0.15f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = if (isTorchOn) Icons.Default.FlashlightOff else Icons.Default.FlashlightOn,
+                                contentDescription = "Flashlight",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Turn Flash", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
+                    }
+
+                    // Import from Local Image/Gallery button
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = { galleryLauncher.launch("image/*") },
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(Color.White.copy(alpha = 0.15f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = "Import Gallery",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Upload Image", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
+                    }
+                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
         }
-    )
+    }
 }
 
 @Composable
@@ -1094,6 +1270,96 @@ fun OnboardingSetupWizardOverlay(
                 colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary)
             ) {
                 Text(if (currentSlide == 1) "Save & Continue" else "Link Bank Account")
+            }
+        }
+    )
+}
+
+@Composable
+fun QrPayDialog(
+    upiId: String,
+    payeeName: String,
+    bankAccounts: List<com.example.vaultflow.data.model.BankAccount>,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    var amountInput by remember { mutableStateOf("") }
+    var pinInput by remember { mutableStateOf("") }
+    var errorState by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("BHIM UPI QR Payment", fontWeight = FontWeight.Bold, color = VaultTextDark) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = VaultBackgroundLight)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(text = "Payee Name", fontSize = 11.sp, color = VaultTextLight)
+                        Text(text = payeeName, fontWeight = FontWeight.Bold, color = VaultTextDark, fontSize = 16.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "UPI ID / Payee Address", fontSize = 11.sp, color = VaultTextLight)
+                        Text(text = upiId, color = VaultTextDark, fontSize = 13.sp)
+                    }
+                }
+
+                OutlinedTextField(
+                    value = amountInput,
+                    onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amountInput = it },
+                    label = { Text("Payment Amount (₹)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = pinInput,
+                    onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) pinInput = it },
+                    label = { Text("4-digit UPI Security PIN") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                errorState?.let {
+                    Text(text = it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val amountVal = amountInput.toDoubleOrNull()
+                    if (amountVal == null || amountVal <= 0.0) {
+                        errorState = "Please enter a valid payment amount"
+                        return@Button
+                    }
+                    
+                    val activeAccount = bankAccounts.firstOrNull()
+                    val totalAvailable = activeAccount?.balance ?: 0.0
+                    if (amountVal > totalAvailable) {
+                        errorState = "Insufficient funds in your bank account!"
+                        return@Button
+                    }
+
+                    val correctPin = activeAccount?.pin ?: "1234"
+                    if (pinInput != correctPin) {
+                        errorState = "Incorrect security PIN. Please try again!"
+                        return@Button
+                    }
+
+                    onConfirm(amountVal)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary)
+            ) {
+                Text("Confirm & Pay")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = VaultTextLight)
             }
         }
     )
