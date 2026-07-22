@@ -45,6 +45,7 @@ fun SavingsScreen(
 
     if (showAddGoalDialog) {
         AddSavingsGoalDialog(
+            bankAccounts = bankAccounts,
             onDismiss = { showAddGoalDialog = false },
             onConfirm = { title, target, current ->
                 viewModel.addSavingsGoal(
@@ -297,12 +298,14 @@ fun AddMoneyToGoalDialog(
 
 @Composable
 fun AddSavingsGoalDialog(
+    bankAccounts: List<com.example.vaultflow.data.model.BankAccount>,
     onDismiss: () -> Unit,
     onConfirm: (String, Double, Double) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var target by remember { mutableStateOf("") }
     var current by remember { mutableStateOf("") }
+    var errorState by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -327,6 +330,9 @@ fun AddSavingsGoalDialog(
                     label = { Text("Starting Progress") },
                     modifier = Modifier.fillMaxWidth()
                 )
+                errorState?.let {
+                    Text(text = it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
             }
         },
         confirmButton = {
@@ -334,9 +340,24 @@ fun AddSavingsGoalDialog(
                 onClick = {
                     val targetVal = target.toDoubleOrNull() ?: 0.0
                     val currentVal = current.toDoubleOrNull() ?: 0.0
-                    if (title.isNotBlank() && targetVal > 0) {
-                        onConfirm(title, targetVal, currentVal)
+                    
+                    if (title.isBlank()) {
+                        errorState = "Please enter goal title"
+                        return@Button
                     }
+                    if (targetVal <= 0.0) {
+                        errorState = "Please enter a valid target amount"
+                        return@Button
+                    }
+                    
+                    val activeAccount = bankAccounts.firstOrNull()
+                    val totalAvailable = activeAccount?.balance ?: 0.0
+                    if (currentVal > totalAvailable) {
+                        errorState = "Starting progress exceeds your bank balance!"
+                        return@Button
+                    }
+                    
+                    onConfirm(title, targetVal, currentVal)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary)
             ) {

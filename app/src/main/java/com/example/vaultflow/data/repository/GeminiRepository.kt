@@ -71,10 +71,12 @@ class GeminiRepository(
                 }
             """.trimIndent()
             
+            val hasKey = apiKey.isNotBlank() && apiKey != "none" && !apiKey.startsWith("YOUR_GEMINI")
+            val suffix = if (hasKey) "?key=$apiKey" else ""
             val url = if (baseUrl.endsWith("/")) {
-                "${baseUrl}v1beta/models/$modelName:generateContent?key=$apiKey"
+                "${baseUrl}v1beta/models/$modelName:generateContent$suffix"
             } else {
-                "$baseUrl/v1beta/models/$modelName:generateContent?key=$apiKey"
+                "$baseUrl/v1beta/models/$modelName:generateContent$suffix"
             }
             
             val request = Request.Builder()

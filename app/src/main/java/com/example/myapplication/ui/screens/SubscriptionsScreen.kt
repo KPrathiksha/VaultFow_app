@@ -33,10 +33,12 @@ fun SubscriptionsScreen(
     onNavigate: (String) -> Unit = {}
 ) {
     val subscriptions by viewModel.subscriptions.collectAsState()
+    val bankAccounts by viewModel.bankAccounts.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
 
     if (showAddDialog) {
         AddSubscriptionDialog(
+            bankAccounts = bankAccounts,
             onDismiss = { showAddDialog = false },
             onConfirm = { name, amount, cycle, category ->
                 viewModel.addSubscription(
@@ -223,6 +225,7 @@ fun SubscriptionItem(sub: Subscription) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddSubscriptionDialog(
+    bankAccounts: List<com.example.vaultflow.data.model.BankAccount>,
     onDismiss: () -> Unit,
     onConfirm: (name: String, amount: Double, cycle: String, category: String) -> Unit
 ) {
@@ -302,6 +305,14 @@ fun AddSubscriptionDialog(
                         errorState = "Please enter a valid billing amount"
                         return@Button
                     }
+                    
+                    val activeAccount = bankAccounts.firstOrNull()
+                    val totalAvailable = activeAccount?.balance ?: 0.0
+                    if (amountVal > totalAvailable) {
+                        errorState = "Insufficient balance in your bank account!"
+                        return@Button
+                    }
+                    
                     onConfirm(name, amountVal, cycle, category)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = VaultPrimary)

@@ -56,11 +56,7 @@ fun WalletScreen(
             onDismiss = { showLoadMoneyDialog = false },
             onConfirm = { loadAmount ->
                 val activeAcc = selectedAccountForLoad!!
-                val newBal = activeAcc.balance + loadAmount
-                // Update balance on Firestore
-                viewModel.updateBankAccountBalance(activeAcc.id, newBal)
-                
-                // Add Income transaction to history & local JSON
+                // Add Income transaction to history (which atomically updates bank balance in Firestore!)
                 viewModel.addTransaction(
                     Transaction(
                         title = "Loaded to ${activeAcc.bankName}",

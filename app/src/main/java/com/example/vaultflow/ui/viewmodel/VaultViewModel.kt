@@ -340,8 +340,10 @@ class VaultViewModel : ViewModel() {
 
     suspend fun fetchBestModel(key: String, baseUrl: String = ""): String = withContext(Dispatchers.IO) {
         val client = okhttp3.OkHttpClient()
+        val hasKey = key.isNotBlank() && key != "none" && !key.startsWith("YOUR_GEMINI")
         val url = if (baseUrl.isNotBlank()) {
-            if (baseUrl.endsWith("/")) "${baseUrl}v1beta/models?key=$key" else "$baseUrl/v1beta/models?key=$key"
+            val suffix = if (hasKey) "?key=$key" else ""
+            if (baseUrl.endsWith("/")) "${baseUrl}v1beta/models$suffix" else "$baseUrl/v1beta/models$suffix"
         } else {
             "https://generativelanguage.googleapis.com/v1beta/models?key=$key"
         }
@@ -382,6 +384,7 @@ class VaultViewModel : ViewModel() {
     }
 
     suspend fun validateGeminiKey(testKey: String, testBaseUrl: String = ""): Boolean = withContext(Dispatchers.IO) {
+        val hasKey = testKey.isNotBlank() && testKey != "none" && !testKey.startsWith("YOUR_GEMINI")
         if (testBaseUrl.isNotBlank()) {
             try {
                 val client = okhttp3.OkHttpClient()
@@ -395,10 +398,11 @@ class VaultViewModel : ViewModel() {
                         }]
                     }
                 """.trimIndent()
+                val suffix = if (hasKey) "?key=$testKey" else ""
                 val url = if (testBaseUrl.endsWith("/")) {
-                    "${testBaseUrl}v1beta/models/gemini-1.5-flash:generateContent?key=$testKey"
+                    "${testBaseUrl}v1beta/models/gemini-1.5-flash:generateContent$suffix"
                 } else {
-                    "$testBaseUrl/v1beta/models/gemini-1.5-flash:generateContent?key=$testKey"
+                    "$testBaseUrl/v1beta/models/gemini-1.5-flash:generateContent$suffix"
                 }
 
                 val requestBody = jsonPayload.toRequestBody(mediaType)
