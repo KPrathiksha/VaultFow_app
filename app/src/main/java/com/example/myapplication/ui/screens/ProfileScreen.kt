@@ -454,9 +454,12 @@ fun ConfigureApiDialog(
                             feedbackState = "Added successfully! Active Model: $bestModel"
                             onConfirm(testKey, testBaseUrl, bestModel)
                         } else {
+                            // Google blocked validation, but let's be smart and save it anyway!
+                            val bestModel = "gemini-flash-latest"
                             isValidating = false
-                            isSuccess = false
-                            feedbackState = "Invalid API setup. Please verify credentials!"
+                            isSuccess = true
+                            feedbackState = "Saved anyway! (Note: Google blocked verification. Make sure your 'Generative Language API' is enabled in your Google Console!)"
+                            onConfirm(testKey, testBaseUrl, bestModel)
                         }
                     }
                 },

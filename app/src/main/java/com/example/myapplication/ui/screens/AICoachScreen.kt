@@ -21,7 +21,7 @@ import com.example.vaultflow.ui.theme.*
 import com.example.vaultflow.ui.viewmodel.VaultViewModel
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AICoachScreen(
     viewModel: VaultViewModel = viewModel(),
@@ -105,10 +105,14 @@ fun AICoachScreen(
         },
         bottomBar = { VaultBottomNavigation(currentRoute = "ai_coach", onNavigate = onNavigate) }
     ) { padding ->
+        val isKeyboardVisible = WindowInsets.isImeVisible
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(
+                    top = padding.calculateTopPadding(),
+                    bottom = if (isKeyboardVisible) 0.dp else padding.calculateBottomPadding()
+                )
                 .background(VaultBackgroundLight)
         ) {
             LazyColumn(

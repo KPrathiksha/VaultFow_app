@@ -41,6 +41,7 @@ node_modules/
 local.properties
 android/local.properties
 backend/.env
+web_app/.env
 app/release/
 Appium_tests/reports/
 selenium-tests/target/

@@ -17,7 +17,7 @@ class GeminiRepository(
 ) {
     
     private val generativeModel = GenerativeModel(
-        modelName = modelName,
+        modelName = if (modelName == "gemini-flash-latest") "gemini-1.5-flash" else modelName,
         apiKey = apiKey
     )
 

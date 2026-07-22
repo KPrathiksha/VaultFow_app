@@ -54,7 +54,28 @@ class FirestoreRepository {
                         trySend(emptyList())
                         return@addSnapshotListener
                     }
-                    val transactions = snapshot?.toObjects(Transaction::class.java) ?: emptyList()
+                    val transactions = snapshot?.documents?.mapNotNull { doc ->
+                        try {
+                            val id = doc.id
+                            val title = doc.getString("title") ?: ""
+                            val amount = (doc.get("amount") as? Number)?.toDouble() ?: 0.0
+                            val category = doc.getString("category") ?: "General"
+                            
+                            val typeStr = doc.getString("type") ?: "EXPENSE"
+                            val type = if (typeStr == "INCOME") TransactionType.INCOME else TransactionType.EXPENSE
+                            
+                            val dateObj = doc.get("date")
+                            val date = when (dateObj) {
+                                is com.google.firebase.Timestamp -> dateObj
+                                else -> com.google.firebase.Timestamp.now()
+                            }
+                            
+                            Transaction(id, title, amount, category, type, date)
+                        } catch (e: Exception) {
+                            android.util.Log.e("FirestoreRepository", "Manual Transaction parse failed: ${e.message}")
+                            null
+                        }
+                    } ?: emptyList()
                     trySend(transactions)
                 }
             awaitClose { subscription.remove() }
@@ -223,7 +244,22 @@ class FirestoreRepository {
                         trySend(emptyList())
                         return@addSnapshotListener
                     }
-                    val accounts = snapshot?.toObjects(BankAccount::class.java) ?: emptyList()
+                    val accounts = snapshot?.documents?.mapNotNull { doc ->
+                        try {
+                            BankAccount(
+                                id = doc.id,
+                                bankName = doc.getString("bankName") ?: "",
+                                accountHolder = doc.getString("accountHolder") ?: "",
+                                accountNumber = doc.getString("accountNumber") ?: "",
+                                balance = (doc.get("balance") as? Number)?.toDouble() ?: 0.0,
+                                pin = doc.getString("pin") ?: ""
+                            )
+                        } catch (e: Exception) {
+                            android.util.Log.e("FirestoreRepository", "Manual BankAccount parse failed: ${e.message}")
+                            null
+                        }
+                    } ?: emptyList()
+
                     val decryptedAccounts = accounts.map { acc ->
                         acc.copy(
                             accountNumber = com.example.vaultflow.util.CryptoHelper.decrypt(acc.accountNumber),
