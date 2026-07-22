@@ -64,6 +64,11 @@ class FirestoreRepository {
     suspend fun addTransaction(transaction: Transaction) {
         try {
             val userDoc = getUserDoc() ?: return
+            
+            // Query their bank accounts before launching the transaction
+            val bankAccountsSnapshot = userDoc.collection("bank_accounts").get().await()
+            val firstAccountDoc = bankAccountsSnapshot.documents.firstOrNull()
+
             firestore.runTransaction { fireTransaction ->
                 val userSnapshot = try {
                     fireTransaction.get(userDoc)
@@ -89,6 +94,18 @@ class FirestoreRepository {
                     fireTransaction.set(userDoc, mapOf("totalBalance" to newBalance), SetOptions.merge())
                 }
                 
+                // Also update the balance of their active bank account document in Firestore!
+                if (firstAccountDoc != null) {
+                    val accRef = firstAccountDoc.reference
+                    val currentAccBalance = firstAccountDoc.getDouble("balance") ?: 0.0
+                    val newAccBalance = if (transaction.type == TransactionType.INCOME) {
+                        currentAccBalance + transaction.amount
+                    } else {
+                        currentAccBalance - transaction.amount
+                    }
+                    fireTransaction.update(accRef, "balance", newAccBalance)
+                }
+
                 val transactionRef = userDoc.collection("transactions").document()
                 fireTransaction.set(transactionRef, transaction.copy(id = transactionRef.id))
             }.await()

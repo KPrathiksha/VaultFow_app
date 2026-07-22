@@ -125,12 +125,16 @@ fun DashboardScreen(
                 viewModel.saveProfile(updatedProfile)
                 
                 // Create a default Bank Account with their set PIN instantly so they have a pin-authorized bank!
+                val banksList = listOf("HDFC Bank", "ICICI Bank", "State Bank of India", "Axis Bank", "Kotak Mahindra Bank")
+                val randomBank = banksList.random()
+                val randomAcc = "**** " + (1000..9999).random()
+
                 viewModel.addBankAccount(
                     com.example.vaultflow.data.model.BankAccount(
-                        bankName = "HDFC Bank",
+                        bankName = randomBank,
                         accountHolder = name,
-                        accountNumber = "**** 2839",
-                        balance = 25000.0,
+                        accountNumber = randomAcc,
+                        balance = 0.0,
                         pin = pin
                     )
                 )
